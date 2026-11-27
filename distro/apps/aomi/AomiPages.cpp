@@ -9,7 +9,16 @@
 #include "ServoContentView.h"
 
 #include <Application.h>
+#include <Bitmap.h>
+#include <BitmapStream.h>
+#include <DataIO.h>
+#include <Path.h>
+#include <Roster.h>
+#include <TranslationDefs.h>
+#include <TranslatorRoster.h>
 #include <WindowEffects.h>
+
+#include <R5Icons.h>
 
 #include <r5_os_version.h>
 
@@ -70,6 +79,47 @@ json_escape(const char* s)
 	}
 	out << "\"";
 	return out;
+}
+
+
+// The About page shows Aomi's own app icon (the HVIF in Aomi.rdef), as a
+// PNG data URI, so the page and the Deskbar show the same mark. An empty
+// string when it cannot be made; the page then keeps its plain badge.
+static BString
+aomi_icon_data_uri(float side)
+{
+	BString uri;
+	app_info info;
+	if (be_app == NULL || be_app->GetAppInfo(&info) != B_OK)
+		return uri;
+	BPath path(&info.ref);
+	BBitmap* icon = r5_file_icon_bitmap(path.Path(), side);
+	if (icon == NULL)
+		return uri;
+	BBitmapStream stream(icon);
+	BMallocIO png;
+	if (BTranslatorRoster::Default()->Translate(&stream, NULL, NULL, &png,
+			B_PNG_FORMAT) != B_OK) {
+		return uri;
+	}
+	static const char kTable[]
+		= "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	const uint8* data = (const uint8*)png.Buffer();
+	size_t size = png.BufferLength();
+	uri = "data:image/png;base64,";
+	for (size_t i = 0; i < size; i += 3) {
+		uint32 chunk = (uint32)data[i] << 16;
+		if (i + 1 < size)
+			chunk |= (uint32)data[i + 1] << 8;
+		if (i + 2 < size)
+			chunk |= data[i + 2];
+		char out[5] = {
+			kTable[(chunk >> 18) & 63], kTable[(chunk >> 12) & 63],
+			i + 1 < size ? kTable[(chunk >> 6) & 63] : '=',
+			i + 2 < size ? kTable[chunk & 63] : '=', 0 };
+		uri << out;
+	}
+	return uri;
 }
 
 
@@ -151,6 +201,17 @@ aomi_about_html(bool dark)
 		aomi_servo_gl_info()[0] != '\0'
 			? html_escape(aomi_servo_gl_info()).String()
 			: "RADV on AMD GPU &middot; Lavapipe fallback");
+	BString icon = aomi_icon_data_uri(64);
+	int32 start = html.FindFirst("<svg width='52'");
+	int32 end = start >= 0 ? html.FindFirst("</svg>", start) : -1;
+	if (icon.Length() > 0 && end > start) {
+		BString image("<img width='64' height='64' alt='' src='");
+		image << icon << "'>";
+		html.Remove(start, end + 6 - start);
+		html.Insert(image, start);
+		html.ReplaceFirst(".badge{width:72px;height:72px;border-radius:50%;"
+			"background:#0f2a4a;", ".badge{width:72px;height:72px;");
+	}
 	return html;
 }
 

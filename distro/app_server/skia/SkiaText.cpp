@@ -328,21 +328,22 @@ SkiaPainter::DrawString(const char* string, uint32 length, BPoint baseLine,
 	SkMatrix matrix = SkMatrix::MakeAll(m[0], m[2], m[4], m[1], m[3], m[5],
 		0, 0, 1);
 
-	// the Antialiasing tab of Appearance (GlobalSubpixelSettings.h); step
-	// 5b by default: light hinting and clean grayscale anti-aliasing, the
-	// positions stay ServerFont's
-	bool classic = SkiaPainter::Classic();
-	bool subpixel = classic && gSubpixelAntialiasing && fAntialiasText;
+	// the Antialiasing tab of Appearance (GlobalSubpixelSettings.h), in
+	// both looks (owner, 27 Nov 2026: text like Windows' ClearType, with
+	// Manrope): subpixel coverage and full hinting by default; grey with
+	// normal hinting when subpixel is off. The positions stay ServerFont's.
+	// Subpixel coverage only for text on an opaque background (B_OP_COPY,
+	// B_OP_OVER), as ClearType: blended text (B_OP_ALPHA, the desktop
+	// labels over the wallpaper) gets colour fringes, so it stays grey.
+	bool subpixel = gSubpixelAntialiasing && fAntialiasText
+		&& (fDrawingMode == B_OP_COPY || fDrawingMode == B_OP_OVER);
 	SkFont font(typeface, fFont.Size());
 	font.setSubpixel(fSubpixelPrecise);
 	font.setEdging(!fAntialiasText ? SkFont::Edging::kAlias
 		: subpixel ? SkFont::Edging::kSubpixelAntiAlias
 		: SkFont::Edging::kAntiAlias);
-	if (classic) {
-		font.setHinting(!fFont.Hinting() ? SkFontHinting::kNone
-			: subpixel ? SkFontHinting::kFull : SkFontHinting::kNormal);
-	} else
-		font.setHinting(SkFontHinting::kSlight);
+	font.setHinting(!fFont.Hinting() ? SkFontHinting::kNone
+		: subpixel ? SkFontHinting::kFull : SkFontHinting::kNormal);
 	font.setEmbolden(fFont.FalseBoldWidth() > 0);
 
 	// one run per typeface: the font, or the fallback the glyph came from
