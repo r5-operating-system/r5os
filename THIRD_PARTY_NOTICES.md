@@ -435,6 +435,16 @@ Location: `distro/graphics/src/add-ons/accelerants/radeon_hd/clearstate_defs.h` 
 
 The files are unmodified. sha256 `70eb9f9a57d2cacb2ee2d7b9f17485384019ac03c845ce4bea941acdae137285` and `e885c7f6475efd74e7729688a70992ff9543979363eb029c628bd95627fb34b5`. The permission text stays in each file. AMD does not endorse R5.
 
+### AMD display (DCN 2.1) register definitions and sequence
+
+Location: `distro/graphics/src/add-ons/accelerants/radeon_hd/dcn21_regs.h`, `dcn21_head.cpp`, `dcn21_hotplug.cpp`, `dcn_display.cpp`, and `distro/graphics/src/add-ons/kernel/drivers/graphics/radeon_hd/dcn21_early.cpp`. Compiled into the `radeon_hd` accelerant and driver.
+
+| Piece | Project | License |
+|---|---|---|
+| Register offsets, strides and fields; the order of the display start | Advanced Micro Devices, Inc. (2012–2022), via Linux v6.12 `drivers/gpu/drm/amd/include/` (`renoir_ip_offset.h`, `asic_reg/dcn/dcn_2_1_0_*.h`, `atomfirmware.h`, `discovery.h`) and `drivers/gpu/drm/amd/display/dc/` | MIT |
+
+R5 wrote these files itself; it took the register values from AMD's headers and follows the call order of AMD's display code, cited per function in the files and in `docs/DISPLAY-DCN.md`. The MIT permission text is `LICENSES/MIT.txt`. AMD does not endorse R5.
+
 ### Mesa packet definitions
 
 Location: `distro/graphics/third_party/mesa-25.3.6/src/amd/common/sid.h`. Read by `scripts/check-pm4.py` on the host. Not compiled into the image.

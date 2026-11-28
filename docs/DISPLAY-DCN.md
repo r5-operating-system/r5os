@@ -106,7 +106,7 @@ Linux v6.12, `drivers/gpu/drm/amd/display/dc/`, for DCN 2.1 (`dcn21_init.c` name
 - **DVI, not HDMI signalling.** Linux picks HDMI when the EDID has an HDMI block. DVI needs no AVI infoframe, no audio, no scrambling. Safe: every HDMI sink must accept DVI. HDMI signalling (infoframes, audio, above 165 MHz) is a later step.
 - **No DISPCLK, DCFCLK or watermark update** (`clk_mgr/dcn21/rn_clk_mgr.c` `rn_update_clocks()`, `hubbub` watermarks). Linux runs these through DML for the planes. With no plane on this pipe nothing fetches memory, so watermarks have no effect; DISPCLK stays what the firmware set for the panel. Step 2a logs it. If the OTG's DIO FIFO reports errors (`OTGn_PIXEL_RATE_CNTL`, logged at the end), step 3 adds the clock update.
 - **Global sync without DML.** VSTARTUP is the last blank line before active, VUPDATE offset 0 width 1, VREADY 1. These only time the HUBP fetch, which this pipe does not have. Step 3 takes them from DML.
-- **No DMCUB.** On Renoir Linux sends the VBIOS tables through DMCUB (`dmub_command_table = true` in `resource/dcn21/dcn21_resource.c`); `bios/command_table2.c` runs the same tables through the interpreter when there is no DMCUB service, and R5 does that. R5 does not reset or load the DMCUB the GOP may run for the panel.
+- **No DMCUB.** On Renoir Linux sends the VBIOS tables through DMCUB (`dmub_command_table = true` in `resource/dcn21/dcn21_resource.c`); `bios/command_table2.c` runs the same tables through the interpreter when there is no DMCUB service, and R5 does that. R5 does not reset or load the DMCUB the GOP may run for the panel. Because the interpreter and a running DMCUB could meet on the same PHY, DCCG and SMU registers, step 2 does not start while `DMCUB_CNTL` shows the DMCUB enabled (review, 28 Nov 2026).
 - **No `init_hw`.** Linux's `dcn10_init_hw()` re-initialises the display at driver load unless it keeps the firmware state (seamless boot). R5 keeps the firmware state for everything it does not start.
 - **No PSR, no FreeSync (DRR), no DSC, no audio.** None of them is needed to show a picture; each is a later step.
 - **EDID by bit-bang, not the DC_I2C engine** (step 1): see step 1.
@@ -228,6 +228,7 @@ The first 5625U stick of this PR (commit `2b017df33a`, syslog in `R5OS-hdmi/gene
   - `MM_INDEX`/`MM_DATA` through the I/O BAR 4.
 
   It also logs `RCC_CONFIG_MEMSIZE` and `IP_DISCOVERY_VERSION`. The only writes are to the bus interface's index registers, as Linux does for each indirect read; each is put back. Nothing in DCN is written, and the probe logs the time it takes.
+- **A mistake found in review (28 Nov).** The DCCG registers `DENTIST_DISPCLK_CNTL`, `OTGn_PIXEL_RATE_CNTL` and `PHYPLLA_PIXCLK_RESYNC_CNTL` have `BASE_IDX 1` (segment `0xC0`), not 2. Sticks 1 and 2 read them at the wrong address; nothing wrote them, because the gate kept step 2 off. They now use segment 1 (`DCN21_SEG1_BYTES`). This does not explain the all-ones reads: `DC_PINSTRAPS`, `DMCUB_CNTL` and the OTGs really are segment 2.
 - **Isolation.** Until the registers answer, the gate keeps every DCN write away. Step 4 writes no DCN register (its second screen is memory), so the same cause cannot reach it.
 
 ## Kernel interface

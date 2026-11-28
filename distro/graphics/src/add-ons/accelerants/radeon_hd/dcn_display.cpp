@@ -107,6 +107,12 @@ dcn_vbios_pin_lookup(uint8 gpioId, uint32* regIndex, uint8* bitShift)
 	// bios_parser2.c get_gpio_i2c_info() only knows content revision 1.
 	if (crev != 1 || size < 4 + kPinBytes)
 		return false;
+	// The table must lie inside the VBIOS image
+	// (bios_parser2.c GET_IMAGE checks against bios_size).
+	uint32 romSize = gInfo->shared_info->rom_size;
+	if (gAtomContext == NULL || gAtomContext->bios == NULL || romSize == 0
+		|| (uint32)offset + (uint32)size > romSize)
+		return false;
 
 	const uint8* table = gAtomContext->bios + offset;
 	uint32 count = (size - 4) / kPinBytes;
@@ -173,7 +179,8 @@ dcn_settings_generation()
 		strlcat(path, "/kernel/drivers/radeon_hd", sizeof(path));
 		struct stat st;
 		if (stat(path, &st) == 0)
-			generation += (uint64)st.st_mtime * 1000003ull + (uint64)st.st_size;
+			generation += (uint64)st.st_mtim.tv_sec * 1000003ull
+				+ (uint64)st.st_mtim.tv_nsec + (uint64)st.st_size;
 	}
 	return generation;
 }
@@ -245,14 +252,18 @@ dcn_marker_start()
 }
 
 
-void
+bool
 dcn_marker_arm(const char* step)
 {
 	char text[96];
 	snprintf(text, sizeof(text), "armed %s %llu\n", step,
 		(unsigned long long)sSettingsGeneration);
-	if (!dcn_marker_write(text))
-		dcn_switch_off("the crash marker could not be written");
+	if (dcn_marker_write(text))
+		return true;
+	// Without the marker on the disk a crash in this step could repeat at
+	// every start: the step does not run.
+	dcn_switch_off("the crash marker could not be written");
+	return false;
 }
 
 
@@ -276,7 +287,8 @@ dcn_timing_from_edid(const edid1_info* edid, uint32 maxKHz,
 			continue;
 		const edid1_detailed_timing& t = monitor->data.detailed_timing;
 		uint32 khz = (uint32)t.pixel_clock * 10;
-		if (khz == 0 || t.interlaced || khz > maxKHz) {
+		if (khz == 0 || t.interlaced || khz > maxKHz || t.h_active == 0
+			|| t.v_active == 0 || t.h_sync_width == 0 || t.v_sync_width == 0) {
 			DCNLOG("edid timing %ux%u %" B_PRIu32 " kHz%s skipped (limit %"
 				B_PRIu32 " kHz, progressive)\n", (unsigned)t.h_active,
 				(unsigned)t.v_active, khz, t.interlaced ? " interlaced" : "",
@@ -329,6 +341,11 @@ dcn_log_edid(uint32 id, const edid1_info* edid)
 			}
 			for (int c = (int)strlen(name) - 1; c >= 0 && name[c] == ' '; c--)
 				name[c] = 0;
+			// Printable ASCII only in the syslog.
+			for (int c = 0; name[c] != 0; c++) {
+				if (name[c] < 0x20 || name[c] > 0x7e)
+					name[c] = '?';
+			}
 		} else if (monitor->monitor_desc_type == EDID1_IS_DETAILED_TIMING
 			&& timing == NULL) {
 			timing = &monitor->data.detailed_timing;
@@ -392,7 +409,8 @@ dcn_probe_locked()
 		return;
 
 	DCNLOG("%s\n", ops->name);
-	dcn_marker_arm("pipes");
+	if (!dcn_marker_arm("pipes"))
+		return;
 	ops->log_pipes();
 	// No DCN register is written before the registers are known to answer
 	// (stick 1 of PR 4712: every read was 0xffffffff, and the DDC bit-bang
@@ -424,7 +442,8 @@ dcn_probe_locked()
 		edid1_info edid;
 		memset(&state, 0, sizeof(state));
 		memset(&edid, 0, sizeof(edid));
-		dcn_marker_arm("hotplug");
+		if (!dcn_marker_arm("hotplug"))
+			break;
 		status_t status = ops->probe_connector(id, records.hasI2c,
 			records.i2cId, records.hasHpd, records.hpdPin, &state, &edid);
 		dcn_marker_clear();
@@ -439,7 +458,8 @@ dcn_probe_locked()
 		if (started || !dcn_setting("dcn_hdmi_modeset", false))
 			continue;
 		started = true;
-		dcn_marker_arm("head");
+		if (!dcn_marker_arm("head"))
+			break;
 		status = ops->head_start(&state, &edid);
 		dcn_marker_clear();
 		if (status != B_OK)

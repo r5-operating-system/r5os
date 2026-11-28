@@ -82,6 +82,10 @@ static const int kTableTransmitterControl = 76;
 
 // atomfirmware.h and atombios.h values.
 static const uint8 kAtomComboPhyPll0 = 20;			// ATOM_COMBOPHY_PLL0
+static const uint8 kAtomCrtcInvalid = 0xff;			// ATOM_CRTC_INVALID
+// PIXEL_CLOCK_V7_MISC_FORCE_PROG_PPLL (dce110_clock_source_power_down sets
+// FORCE_PROGRAMMING_OF_PLL).
+static const uint8 kPixelClockForceProgPpll = 0x01;
 static const uint8 kAtomEncoderModeDvi = 2;			// ATOM_ENCODER_MODE_DVI
 static const uint8 kAtomEncoderCmdStreamSetup = 0x0f;
 static const uint8 kAtomTransmitterDisable = 0;
@@ -158,9 +162,19 @@ struct dcn21_head {
 	uint8		encoderObject;
 	uint8		connectorObject;
 	dcn_timing	timing;
+	// What has been turned on, so dcn21_head_off() undoes exactly that.
+	bool		clocksOn;
+	bool		pixelClockOn;
+	bool		oppClockOn;
 	bool		otgStarted;
+	bool		beConnected;
 	bool		phyOn;
 };
+
+
+// Set when a register read all ones during the start: the block stopped
+// answering, and nothing more is written.
+static bool sAccessLost = false;
 
 
 static inline uint32
@@ -177,23 +191,75 @@ dcn21_write(uint32 offset, uint32 value)
 }
 
 
-static inline void
+// Read-modify-write that never writes back a value read as all ones.
+static inline bool
 dcn21_update(uint32 offset, uint32 mask, uint32 value)
 {
-	dcn21_write(offset, (dcn21_read(offset) & ~mask) | (value & mask));
+	uint32 old = dcn21_read(offset);
+	if (old == 0xffffffff) {
+		if (!sAccessLost)
+			HEADLOG("register 0x%" B_PRIx32 " reads 0xffffffff, stopping\n",
+				offset);
+		sAccessLost = true;
+		return false;
+	}
+	dcn21_write(offset, (old & ~mask) | (value & mask));
+	return true;
 }
 
 
+// DCCG registers are in DMU segment 1 (BASE_IDX 1), not 2.
+static inline uint32
+dcn21_read_seg1(uint32 offset)
+{
+	return Read32(OUT, DCN21_SEG1_BYTES(offset));
+}
+
+
+static inline bool
+dcn21_update_seg1(uint32 offset, uint32 mask, uint32 value)
+{
+	uint32 old = dcn21_read_seg1(offset);
+	if (old == 0xffffffff) {
+		sAccessLost = true;
+		return false;
+	}
+	Write32(OUT, DCN21_SEG1_BYTES(offset), (old & ~mask) | (value & mask));
+	return true;
+}
+
+
+// REG_WAIT for a bit to become set; all ones is not "set".
 static bool
 dcn21_wait_set(uint32 offset, uint32 bit, bigtime_t timeout)
 {
 	bigtime_t end = system_time() + timeout;
 	do {
-		if ((dcn21_read(offset) & bit) != 0)
+		uint32 value = dcn21_read(offset);
+		if (value == 0xffffffff) {
+			sAccessLost = true;
+			return false;
+		}
+		if ((value & bit) != 0)
 			return true;
 		spin(10);
 	} while (system_time() < end);
-	return (dcn21_read(offset) & bit) != 0;
+	return false;
+}
+
+
+// REG_WAIT for a bit to become clear; all ones is not "clear".
+static bool
+dcn21_wait_clear(uint32 offset, uint32 bit, bigtime_t timeout)
+{
+	bigtime_t end = system_time() + timeout;
+	do {
+		uint32 value = dcn21_read(offset);
+		if (value != 0xffffffff && (value & bit) == 0)
+			return true;
+		snooze(100);
+	} while (system_time() < end);
+	return false;
 }
 
 
@@ -238,11 +304,21 @@ dcn21_transmitter(const encoder_info& encoder)
 }
 
 
-// Undo, for a step that failed after the OTG started.
+// Undo, in reverse order, what a failed start turned on: the PHY
+// (dcn10_link_encoder_disable_output, VBIOS transmitter disable), the
+// DIG back end's front-end select, the OTG (optc1_disable_crtc: master
+// off, VTG off, wait up to 100 ms for OTG_BUSY to clear), the DPG, the OPP
+// clock (opp1_pipe_clock_control(false)), the OTG and OPTC clocks
+// (optc1_enable_optc_clock(false)) and the PLL
+// (dce110_clock_source_power_down: setpixelclock with pixel clock 0).
+// Writes stop if the block stops answering.
 static void
 dcn21_head_off(const dcn21_head& head)
 {
 	uint32 dig = head.dig * DCN21_DIG_STRIDE;
+	uint32 otg = head.otg * DCN21_OTG_STRIDE;
+	uint32 odm = head.otg * DCN21_ODM_STRIDE;
+	uint32 opp = head.otg * DCN21_OPP_STRIDE;
 	if (head.phyOn) {
 		dcn21_dig_transmitter_control_v1_6 tx;
 		memset(&tx, 0, sizeof(tx));
@@ -258,13 +334,36 @@ dcn21_head_off(const dcn21_head& head)
 		HEADLOG("transmitter %" B_PRIu32 " off: %s\n", head.dig,
 			strerror(status));
 	}
-	dcn21_update(DCN21_DIG_BE_CNTL + dig, DCN21_DIG_FE_SOURCE_SELECT_MASK, 0);
+	if (head.beConnected)
+		dcn21_update(DCN21_DIG_BE_CNTL + dig, DCN21_DIG_FE_SOURCE_SELECT_MASK,
+			0);
 	if (head.otgStarted) {
-		dcn21_update(DCN21_OTG_CONTROL + head.otg * DCN21_OTG_STRIDE,
-			DCN21_OTG_MASTER_EN, 0);
+		dcn21_update(DCN21_OTG_CONTROL + otg, DCN21_OTG_DISABLE_POINT_MASK
+			| DCN21_OTG_MASTER_EN, 3u << DCN21_OTG_DISABLE_POINT_SHIFT);
+		dcn21_update(DCN21_VTG_CONTROL + head.otg, DCN21_VTG_ENABLE, 0);
+		if (!dcn21_wait_clear(DCN21_OTG_CLOCK_CONTROL + otg,
+				DCN21_OTG_BUSY, 100000))
+			HEADLOG("otg%" B_PRIu32 " still busy after 100 ms\n", head.otg);
 	}
-	dcn21_update(DCN21_DPG_CONTROL + head.otg * DCN21_OPP_STRIDE,
-		DCN21_DPG_EN, 0);
+	dcn21_update(DCN21_DPG_CONTROL + opp, DCN21_DPG_EN, 0);
+	if (head.oppClockOn)
+		dcn21_update(DCN21_OPP_PIPE_CONTROL + opp, DCN21_OPP_PIPE_CLOCK_EN, 0);
+	if (head.clocksOn) {
+		dcn21_update(DCN21_OTG_CLOCK_CONTROL + otg,
+			DCN21_OTG_CLOCK_GATE_DIS | DCN21_OTG_CLOCK_EN, 0);
+		dcn21_update(DCN21_OPTC_INPUT_CLOCK_CONTROL + odm,
+			DCN21_OPTC_INPUT_CLK_GATE_DIS | DCN21_OPTC_INPUT_CLK_EN, 0);
+	}
+	if (head.pixelClockOn) {
+		dcn21_set_pixel_clock_v1_7 clock;
+		memset(&clock, 0, sizeof(clock));
+		clock.pll_id = kAtomComboPhyPll0;
+		clock.crtc_id = kAtomCrtcInvalid;
+		clock.miscinfo = kPixelClockForceProgPpll;
+		status_t status = dcn21_run_table(kTableSetPixelClock, &clock,
+			sizeof(clock));
+		HEADLOG("pll combophy0 off: %s\n", strerror(status));
+	}
 	HEADLOG("otg%" B_PRIu32 " off\n", head.otg);
 }
 
@@ -357,6 +456,7 @@ dcn21_enable_stream_timing(dcn21_head& head)
 	dcn21_update(DCN21_OTG_CLOCK_CONTROL + otg, DCN21_OTG_CLOCK_EN
 		| DCN21_OTG_CLOCK_GATE_DIS, DCN21_OTG_CLOCK_EN
 		| DCN21_OTG_CLOCK_GATE_DIS);
+	head.clocksOn = true;
 	bool otgOn = dcn21_wait_set(DCN21_OTG_CLOCK_CONTROL + otg,
 		DCN21_OTG_CLOCK_ON, kClockOnTimeout);
 	HEADLOG("otg%" B_PRIu32 " clocks optc %s otg %s\n", o,
@@ -375,13 +475,14 @@ dcn21_enable_stream_timing(dcn21_head& head)
 	clock.crtc_id = (uint8)o;
 	status_t status = dcn21_run_table(kTableSetPixelClock, &clock,
 		sizeof(clock));
+	head.pixelClockOn = true;
 	HEADLOG("setpixelclock: %s, pixel rate 0x%08" B_PRIx32 "\n",
-		strerror(status), dcn21_read(DCN21_OTG_PIXEL_RATE_CNTL + o * 4));
+		strerror(status), dcn21_read_seg1(DCN21_OTG_PIXEL_RATE_CNTL + o * 4));
 	if (status != B_OK)
 		return status;
 	// dce112_program_pixel_clk_resync(): not HDMI, so deep colour 0. PLL0
 	// is PHYPLLA (clk_src_regs[0] in dcn21_resource.c).
-	dcn21_update(DCN21_PHYPLLA_PIXCLK_RESYNC_CNTL,
+	dcn21_update_seg1(DCN21_PHYPLLA_PIXCLK_RESYNC_CNTL,
 		DCN21_PHYPLL_DCCG_DEEP_COLOR_CNTL_MASK, 0);
 
 	// optc1_program_timing().
@@ -408,8 +509,9 @@ dcn21_enable_stream_timing(dcn21_head& head)
 	dcn21_update(DCN21_OTG_CONTROL + otg,
 		DCN21_OTG_START_POINT_CNTL | DCN21_OTG_FIELD_NUMBER_CNTL, 0);
 	// optc1_program_global_sync(). Linux takes these from DML for the HUBP
-	// fetch. This pipe has no plane: VSTARTUP is the last blank line before
-	// active, VUPDATE offset 0 width 1, VREADY 1 (difference, see the doc).
+	// fetch. This pipe has no plane. VSTARTUP counts lines back from the
+	// start of active: vblank - 1 puts it at the first line of the blank.
+	// VUPDATE offset 0 width 1, VREADY 1 (difference, see the doc).
 	uint32 vstartup = t.vTotal - t.vActive - 1;
 	if (vstartup > DCN21_OTG_VSTARTUP_MASK)
 		vstartup = DCN21_OTG_VSTARTUP_MASK;
@@ -432,6 +534,7 @@ dcn21_enable_stream_timing(dcn21_head& head)
 	// opp1_pipe_clock_control(true), opp2_program_left_edge_extra_pixel(RGB).
 	dcn21_update(DCN21_OPP_PIPE_CONTROL + opp, DCN21_OPP_PIPE_CLOCK_EN,
 		DCN21_OPP_PIPE_CLOCK_EN);
+	head.oppClockOn = true;
 	dcn21_update(DCN21_FMT_422_CONTROL + opp,
 		DCN21_FMT_LEFT_EDGE_EXTRA_PIXEL_COUNT, 0);
 
@@ -443,6 +546,10 @@ dcn21_enable_stream_timing(dcn21_head& head)
 	dcn21_update(DCN21_DPG_CONTROL + opp, DCN21_DPG_CONTROL_FIELDS,
 		DCN21_DPG_EN | (kDpgBitDepth8 << DCN21_DPG_BIT_DEPTH_SHIFT)
 		| (6u << DCN21_DPG_VRES_SHIFT) | (6u << DCN21_DPG_HRES_SHIFT));
+
+	// Nothing is started on a block that stopped answering.
+	if (sAccessLost)
+		return B_IO_ERROR;
 
 	// optc2_enable_crtc().
 	dcn21_update(DCN21_OPTC_DATA_SOURCE_SELECT + odm,
@@ -526,6 +633,9 @@ dcn21_dpms_on(dcn21_head& head)
 	dcn21_update(DCN21_DIG_BE_CNTL + dig, DCN21_DIG_FE_SOURCE_SELECT_MASK,
 		dcn21_read(DCN21_DIG_BE_CNTL + dig) | ((1u << head.dig)
 			<< DCN21_DIG_FE_SOURCE_SELECT_SHIFT));
+	head.beConnected = true;
+	if (sAccessLost)
+		return B_IO_ERROR;
 
 	// dcn10_link_encoder_enable_tmds_output(): VBIOS transmitter enable.
 	dcn21_dig_transmitter_control_v1_6 tx;
@@ -563,6 +673,20 @@ dcn21_head_start(const dcn_connector_state* state, const edid1_info* edid)
 
 	dcn21_head head;
 	memset(&head, 0, sizeof(head));
+	sAccessLost = false;
+
+	// Linux sends these VBIOS tables to the DMCUB when it runs
+	// (dcn21_resource.c dmub_command_table, command_table2.c). R5 runs them
+	// in the accelerant's interpreter; with a DMCUB the firmware left
+	// running they could meet on the same PHY, DCCG and SMU registers. Not
+	// started then (review, 28 Nov 2026).
+	uint32 dmcub = dcn21_read(DCN21_DMCUB_CNTL);
+	if (dmcub == 0xffffffff || (dmcub & DCN21_DMCUB_ENABLE) != 0) {
+		HEADLOG("dmcub cntl 0x%08" B_PRIx32 ": %s, not started\n", dmcub,
+			dmcub == 0xffffffff ? "does not answer"
+				: "the firmware's DMCUB runs");
+		return B_NOT_ALLOWED;
+	}
 	if (!dcn_timing_from_edid(edid, kDviSingleLinkKHz, &head.timing)) {
 		HEADLOG("no EDID timing for DVI single link, not started\n");
 		return B_NOT_SUPPORTED;
@@ -670,7 +794,7 @@ dcn21_head_start(const dcn_connector_state* state, const edid1_info* edid)
 		dcn21_read(DCN21_OTG_CONTROL + otg),
 		dcn21_read(DCN21_OTG_STATUS_FRAME_COUNT + otg)
 			& DCN21_OTG_FRAME_COUNT_MASK,
-		dcn21_read(DCN21_OTG_PIXEL_RATE_CNTL + head.otg * 4), head.dig,
+		dcn21_read_seg1(DCN21_OTG_PIXEL_RATE_CNTL + head.otg * 4), head.dig,
 		dcn21_read(DCN21_DIG_FE_CNTL + dig), dcn21_read(DCN21_DIG_BE_CNTL + dig),
 		dcn21_read(DCN21_DPG_CONTROL + opp));
 	return B_OK;

@@ -102,7 +102,11 @@ dcn21_ddc_set(void* cookie, int clock, int data)
 {
 	dcn21_ddc_bus* bus = (dcn21_ddc_bus*)cookie;
 	// Open drain: EN=1 pulls the line low, EN=0 lets the pull-up win.
-	uint32 en = dcn21_read(bus->en) & ~(DCN21_DDC_CLK | DCN21_DDC_DATA);
+	uint32 en = dcn21_read(bus->en);
+	// A pad that stops answering is not written back as all ones.
+	if (dcn21_all_ones(en))
+		return B_IO_ERROR;
+	en &= ~(DCN21_DDC_CLK | DCN21_DDC_DATA);
 	if (!clock)
 		en |= DCN21_DDC_CLK;
 	if (!data)
@@ -281,7 +285,7 @@ dcn21_log_pipes()
 	HEADLOG("dmcub cntl 0x%08" B_PRIx32 " (%s), dispclk cntl 0x%08" B_PRIx32
 		"\n", dmcub, dcn21_all_ones(dmcub) ? "does not answer"
 			: (dmcub & DCN21_DMCUB_ENABLE) != 0 ? "running" : "off",
-		dcn21_read(DCN21_DENTIST_DISPCLK_CNTL));
+		Read32(OUT, DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL)));
 
 	for (uint32 i = 0; i < DCN21_OTG_COUNT; i++) {
 		uint32 otg = i * DCN21_OTG_STRIDE;
@@ -297,12 +301,14 @@ dcn21_log_pipes()
 		HEADLOG("otg%" B_PRIu32 " control 0x%08" B_PRIx32 " %s total %" B_PRIu32
 			"x%" B_PRIu32 " active %" B_PRIu32 "x%" B_PRIu32 " pixel rate 0x%08"
 			B_PRIx32 " frame %" B_PRIu32 "\n", i, control,
-			(control & DCN21_OTG_MASTER_EN) != 0 ? "on" : "off", hTotal, vTotal,
+			dcn21_all_ones(control) ? "does not answer"
+				: (control & DCN21_OTG_MASTER_EN) != 0 ? "on" : "off",
+			hTotal, vTotal,
 			(hBlank & DCN21_OTG_FIELD15_MASK)
 				- ((hBlank >> 16) & DCN21_OTG_FIELD15_MASK),
 			(vBlank & DCN21_OTG_FIELD15_MASK)
 				- ((vBlank >> 16) & DCN21_OTG_FIELD15_MASK),
-			dcn21_read(DCN21_OTG_PIXEL_RATE_CNTL + i * 4),
+			Read32(OUT, DCN21_SEG1_BYTES(DCN21_OTG_PIXEL_RATE_CNTL + i * 4)),
 			dcn21_read(DCN21_OTG_STATUS_FRAME_COUNT + otg)
 				& DCN21_OTG_FRAME_COUNT_MASK);
 		HEADLOG("hubp%" B_PRIu32 " cntl 0x%08" B_PRIx32 " surface 0x%08" B_PRIx32

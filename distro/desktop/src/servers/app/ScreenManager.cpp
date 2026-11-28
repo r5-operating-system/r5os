@@ -233,10 +233,12 @@ ScreenManager::_ScanDrivers()
 		if (r5_multi_screen_test_output(&width, &height)) {
 			R5OutputHWInterface* output = new(nothrow) R5OutputHWInterface(
 				width, height, "Test output");
+			// The id the Screen gets (Screen(interface, CountItems())),
+			// set before Initialize() starts the dump thread that reads it.
+			if (output != NULL)
+				output->SetScreenID(fScreenList.CountItems());
 			screen_item* item = output != NULL
 				? _AddHWInterface(output) : NULL;
-			if (item != NULL)
-				output->SetScreenID(item->screen->ID());
 			syslog(LOG_INFO, "app_server: multi_screen: test output %s\n",
 				item != NULL ? "added" : "failed");
 		} else

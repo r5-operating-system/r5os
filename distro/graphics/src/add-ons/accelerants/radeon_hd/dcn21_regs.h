@@ -1,15 +1,22 @@
 /*
  * SPDX-License-Identifier: MIT
- * Copyright 2026 R5OS Contributors
+ * SPDX-FileCopyrightText: 2026 R5OS Contributors
+ * SPDX-FileCopyrightText: 2019 Advanced Micro Devices, Inc.
+ *   (the register offsets, strides and fields below are taken from AMD's
+ *   MIT-licensed headers named here; their permission notice is
+ *   LICENSES/MIT.txt)
  *
  * DCN 2.1 display registers used by the R5 display steps
  * (docs/DISPLAY-DCN.md). Offsets, strides and fields are facts read from
  * Linux v6.12 (MIT, Copyright 2019 AMD):
  *   drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_offset.h
  *   drivers/gpu/drm/amd/include/asic_reg/dcn/dcn_2_1_0_sh_mask.h
- *   drivers/gpu/drm/amd/include/renoir_ip_offset.h (DMU_BASE seg 2 0x34C0)
- * Every register here has BASE_IDX 2. The byte address is
- * (DCN21_SEG2 + offset) * 4.
+ *   drivers/gpu/drm/amd/include/renoir_ip_offset.h (DMU_BASE seg 1 0xC0,
+ *   seg 2 0x34C0)
+ * Every register here has BASE_IDX 2, byte address (DCN21_SEG2 + offset) * 4,
+ * except the DCCG registers at the end, which have BASE_IDX 1: byte address
+ * (DCN21_SEG1 + offset) * 4 (review of 28 Nov 2026; stick 1 and 2 read them
+ * through segment 2 by mistake).
  */
 #ifndef DCN21_REGS_H
 #define DCN21_REGS_H
@@ -17,6 +24,8 @@
 
 #define DCN21_SEG2						0x34c0u
 #define DCN21_BYTES(offset)				((DCN21_SEG2 + (offset)) * 4u)
+#define DCN21_SEG1						0x00c0u
+#define DCN21_SEG1_BYTES(offset)		((DCN21_SEG1 + (offset)) * 4u)
 
 #define DCN21_OTG_COUNT					4u
 #define DCN21_DIG_COUNT					5u
@@ -77,6 +86,7 @@
 #define DCN21_OTG_CLOCK_EN				(1u << 0)
 #define DCN21_OTG_CLOCK_GATE_DIS		(1u << 1)
 #define DCN21_OTG_CLOCK_ON				(1u << 8)
+#define DCN21_OTG_BUSY					(1u << 16)
 #define DCN21_OTG_FRAME_COUNT_MASK		0x00ffffffu
 #define DCN21_OTG_FIELD15_MASK			0x7fffu
 #define DCN21_OTG_VSTARTUP_MASK			0x3ffu
@@ -192,7 +202,9 @@
 #define DCN21_HUBPREQ_PRIMARY_ADDRESS	0x060au
 #define DCN21_HUBPREQ_PRIMARY_ADDRESS_HIGH 0x060bu
 
-// DCCG. Read only.
+// DCCG: BASE_IDX 1, use DCN21_SEG1_BYTES (dcn_2_1_0_offset.h
+// mmDENTIST_DISPCLK_CNTL_BASE_IDX, mmOTG0_PIXEL_RATE_CNTL_BASE_IDX,
+// mmPHYPLLA_PIXCLK_RESYNC_CNTL_BASE_IDX are 1).
 #define DCN21_DENTIST_DISPCLK_CNTL		0x0064u
 #define DCN21_OTG_PIXEL_RATE_CNTL		0x0080u	// stride 4
 #define DCN21_PHYPLLA_PIXCLK_RESYNC_CNTL	0x0040u

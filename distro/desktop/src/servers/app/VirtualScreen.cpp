@@ -231,6 +231,12 @@ VirtualScreen::UpdateFrame()
 		uint32 colorSpace;
 		float frequency;
 		item->screen->GetMode(width, height, colorSpace, frequency);
+		// The same placement as AddScreen(): a new mode on one screen
+		// moves the ones right of it (review, 28 Nov 2026).
+		if (i == 0)
+			item->frame.OffsetTo(0, 0);
+		else
+			item->frame.OffsetTo(frame.right + 1, 0);
 		item->frame.right = item->frame.left + width - 1;
 		item->frame.bottom = item->frame.top + height - 1;
 		frame = i == 0 ? item->frame : (frame | item->frame);

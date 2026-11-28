@@ -71,7 +71,9 @@ bool dcn_vbios_pin_lookup(uint8 gpioId, uint32* regIndex, uint8* bitShift);
 // step's name; clear it when the step returned. A boot (or an app_server
 // restart) that finds it armed switches DCN off until the radeon_hd settings
 // change.
-void dcn_marker_arm(const char* step);
+// False when the marker could not be written: DCN is then off, and the
+// step must not run.
+bool dcn_marker_arm(const char* step);
 void dcn_marker_clear();
 
 // A failed step switches DCN off for the rest of this boot.

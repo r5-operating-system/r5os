@@ -8,6 +8,29 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-28 - Display: review fixes (DCCG register segment, all-ones checks, full teardown, step 4 frames)
+
+- Problem: Gemini's review of PR 4712 at `fb2ccad8dc` (`generated/HDMI-PR4712-REVIEW-GEMINI.md`). Each finding was checked against Linux v6.12 here.
+- Mistake fixed: `DENTIST_DISPCLK_CNTL`, `OTGn_PIXEL_RATE_CNTL` and `PHYPLLA_PIXCLK_RESYNC_CNTL` have `BASE_IDX 1` (DMU segment 1, `0xC0`; `dcn_2_1_0_offset.h`), not 2. `dcn21_regs.h` said every register was segment 2; steps 2a and 2 read those three at the wrong address, and step 2 would have written the resync register at the wrong address. Now `DCN21_SEG1_BYTES`.
+- Fixed:
+  - **All ones:** never counts as a set bit in `dcn21_wait_set()`; `dcn21_update()` does not write back a value read as all ones and stops the start; the pipe log says `does not answer` instead of `on`; the DDC bit-bang does not write a pad that stops answering.
+  - **Crash marker:** a marker that cannot be written stops the step.
+  - **Teardown:** a failed step 2 now undoes everything it turned on, in reverse order: PHY, DIG back-end select, OTG (`optc1_disable_crtc`: master off, VTG off, up to 100 ms for `OTG_BUSY`), DPG, OPP clock, OTG and OPTC clocks, and the PLL (`setpixelclock` with pixel clock 0, as `dce110_clock_source_power_down` does).
+  - **Bounds:** the `gpio_pin_lut` lookup is bounds-checked against the VBIOS size.
+  - **EDID:** timings with zero active size or zero sync width are refused; the monitor name is printable ASCII only.
+  - **DMCUB:** step 2 does not start while the firmware's DMCUB runs (Linux sends these VBIOS tables through the DMCUB).
+  - **Step 4 frames:** `VirtualScreen::UpdateFrame()` places the screens again after a mode change.
+  - **Step 4 locking:** `Desktop::_ScreenChanged()` updates the frames once, under `fScreenLock`.
+  - **Test output:** its screen id is set before its dump thread starts.
+  - **Settings generation:** includes nanoseconds.
+  - **AMD MIT attribution:** in `dcn21_regs.h` and `THIRD_PARTY_NOTICES.md`.
+  - **VSTARTUP comment:** corrected.
+- Not changed, with reason:
+  - `AS_GET_MONITOR_INFO` with an unknown id still answers for the main screen, as Haiku does, so one screen behaves as before.
+  - The stick 3 probe (`dcn21_early.cpp`) is not changed: that stick is already built.
+- On the all-ones reads, the review's hypothesis is that Linux's SMU and NBIO init (`smu_hw_init`, `PPSMC_MSG_DisableGfxOff`) opens the display before `read_dce_straps()`. The stick 3 probe's indirect paths test the register path first. If every path stays all ones, the power state is the next round.
+- Tested: see the result line below. Not on the 5625U.
+
 ## 2026-11-28 - Display: find the path to the display registers (stick 2 result, probe for stick 3)
 
 - Stick 2 (`fb2ccad8dc`, 5625U): no hang; the gate kept DCN off on all three boots (`registers do not answer: DC_PINSTRAPS 0xffffffff (smu response 0x00000001)`). The kernel read all ones already before the GPU start, so the mode-2 reset is not the cause; the SMU mailbox answers through the same mapping.

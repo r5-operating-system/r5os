@@ -4649,11 +4649,19 @@ Desktop::_ScreenChanged(Screen* screen)
 	// Step 4 (docs/DISPLAY-DCN.md): with more than one screen the desktop is
 	// all of them, and a new mode on one moves the ones beside it; the
 	// whole desktop is redrawn and the pointer may go everywhere on it.
-	if (fVirtualScreen.CountScreens() > 1) {
-		fVirtualScreen.UpdateFrame();
-		fVirtualScreen.GetScreenRegion(fScreenRegion);
+	// fScreenLock (write) around the frames, as for every other change of
+	// fVirtualScreen; this thread may already hold it (MultiLocker nests).
+	bool r5MultiScreen = fVirtualScreen.CountScreens() > 1;
+	if (r5MultiScreen) {
+		BRect desktopFrame;
+		{
+			AutoWriteLocker _(fScreenLock);
+			fVirtualScreen.UpdateFrame();
+			fVirtualScreen.GetScreenRegion(fScreenRegion);
+			desktopFrame = fVirtualScreen.Frame();
+		}
 		dirty = fScreenRegion;
-		gInputManager->UpdateScreenBounds(fVirtualScreen.Frame());
+		gInputManager->UpdateScreenBounds(desktopFrame);
 	}
 // SPDX-SnippetEnd
 
@@ -4674,6 +4682,12 @@ Desktop::_ScreenChanged(Screen* screen)
 	update.AddRect("frame", screen->Frame());
 	update.AddInt32("mode", screen->ColorSpace());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4: with more than one screen the frames were updated above.
+	if (!r5MultiScreen)
+// SPDX-SnippetEnd
 	fVirtualScreen.UpdateFrame();
 
 // SPDX-SnippetBegin
