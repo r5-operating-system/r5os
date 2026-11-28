@@ -3084,11 +3084,21 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			// 1) int32 screen
 
 			int32 id;
-			if (link.Read<int32>(&id) == B_OK
-				&& id == B_MAIN_SCREEN_ID.id)
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Step 4 (docs/DISPLAY-DCN.md): every screen of the desktop.
+			bool valid = false;
+			if (link.Read<int32>(&id) == B_OK) {
+				AutoReadLocker _(fDesktop->ScreenLocker());
+				valid = id == B_MAIN_SCREEN_ID.id
+					|| fDesktop->VirtualScreen().ScreenByExactID(id) != NULL;
+			}
+			if (valid)
 				fLink.StartMessage(B_OK);
 			else
 				fLink.StartMessage(B_ERROR);
+// SPDX-SnippetEnd
 
 			fLink.Flush();
 			break;
@@ -3102,8 +3112,22 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			int32 id;
 			link.Read<int32>(&id);
 
-			// TODO: for now, just say we're the last one
-			fLink.StartMessage(B_ENTRY_NOT_FOUND);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Step 4: the screen after this one, if there is one.
+			int32 next = -1;
+			bool found;
+			{
+				AutoReadLocker _(fDesktop->ScreenLocker());
+				found = fDesktop->VirtualScreen().NextScreenID(id, next);
+			}
+			if (found) {
+				fLink.StartMessage(B_OK);
+				fLink.Attach<int32>(next);
+			} else
+				fLink.StartMessage(B_ENTRY_NOT_FOUND);
+// SPDX-SnippetEnd
 			fLink.Flush();
 			break;
 		}
@@ -3383,7 +3407,19 @@ ServerApp::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 
 			monitor_info info;
 			// TODO: I wonder if there should be a "desktop" lock...
-			status_t status = fDesktop->HWInterface()->GetMonitorInfo(&info);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Step 4: the monitor of that screen.
+			status_t status;
+			{
+				AutoReadLocker _(fDesktop->ScreenLocker());
+				Screen* screen = fDesktop->VirtualScreen().ScreenByExactID(id);
+				status = screen != NULL
+					? screen->HWInterface()->GetMonitorInfo(&info)
+					: fDesktop->HWInterface()->GetMonitorInfo(&info);
+			}
+// SPDX-SnippetEnd
 			if (status == B_OK) {
 				fLink.StartMessage(B_OK);
 				fLink.Attach<monitor_info>(info);

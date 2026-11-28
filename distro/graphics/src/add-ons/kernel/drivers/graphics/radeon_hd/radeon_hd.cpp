@@ -1249,8 +1249,13 @@ radeon_hd_init(radeon_info &info)
 			info.shared_info->vram_hole_offset[2],
 			info.shared_info->vram_hole_bytes[2]);
 	}
+	// Display (docs/DISPLAY-DCN.md): are the DCN registers readable before
+	// and after the GPU start? Reads only.
+	void r5_dcn21_early_log(radeon_info& info, const char* stage);
+	r5_dcn21_early_log(info, "before gpu start");
 	void r5_gfx9_kernel_start(radeon_info& info);
 	r5_gfx9_kernel_start(info);
+	r5_dcn21_early_log(info, "after gpu start");
 // SPDX-SnippetEnd
 	return B_OK;
 }

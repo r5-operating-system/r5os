@@ -835,6 +835,14 @@ Desktop::Init(bool startHidden)
 	// draw the background
 
 	fScreenRegion = fVirtualScreen.Frame();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4 (docs/DISPLAY-DCN.md): with more than one screen, only the
+	// screens; not the empty corner of their bounding rectangle.
+	if (fVirtualScreen.CountScreens() > 1)
+		fVirtualScreen.GetScreenRegion(fScreenRegion);
+// SPDX-SnippetEnd
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
@@ -1004,6 +1012,12 @@ Desktop::Activate()
 			fShown = true;
 			screenFrame = fVirtualScreen.Frame();
 			fScreenRegion = screenFrame;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			if (fVirtualScreen.CountScreens() > 1)
+				fVirtualScreen.GetScreenRegion(fScreenRegion);
+// SPDX-SnippetEnd
 		}
 
 		fEventDispatcher.SetHWInterface(fVirtualScreen.HWInterface());
@@ -1365,6 +1379,13 @@ Desktop::GetScreenFrame(int32 workspace, int32 id, BRect& frame)
 		// retrieve from current screen
 		if (screen != NULL) {
 			frame = screen->Frame();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Step 4: the screen's place on the desktop (the same frame
+			// with one screen).
+			fVirtualScreen.ScreenFrameByID(screen->ID(), frame);
+// SPDX-SnippetEnd
 			return B_OK;
 		}
 // SPDX-SnippetBegin
@@ -4279,8 +4300,12 @@ Desktop::_DetermineScreenFor(BRect frame)
 {
 	AutoReadLocker _(fScreenLock);
 
-	// TODO: choose the screen depending on where most of the area is
-	return fVirtualScreen.ScreenAt(0);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4: the screen with most of the area, as the TODO here asked.
+	return fVirtualScreen.ScreenFor(frame);
+// SPDX-SnippetEnd
 }
 
 
@@ -4618,6 +4643,27 @@ Desktop::_ScreenChanged(Screen* screen)
 	// update our cached screen region
 	fScreenRegion.Set(screen->Frame());
 	gInputManager->UpdateScreenBounds(screen->Frame());
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4 (docs/DISPLAY-DCN.md): with more than one screen the desktop is
+	// all of them, and a new mode on one moves the ones beside it; the
+	// whole desktop is redrawn and the pointer may go everywhere on it.
+	// fScreenLock (write) around the frames, as for every other change of
+	// fVirtualScreen; this thread may already hold it (MultiLocker nests).
+	bool r5MultiScreen = fVirtualScreen.CountScreens() > 1;
+	if (r5MultiScreen) {
+		BRect desktopFrame;
+		{
+			AutoWriteLocker _(fScreenLock);
+			fVirtualScreen.UpdateFrame();
+			fVirtualScreen.GetScreenRegion(fScreenRegion);
+			desktopFrame = fVirtualScreen.Frame();
+		}
+		dirty = fScreenRegion;
+		gInputManager->UpdateScreenBounds(desktopFrame);
+	}
+// SPDX-SnippetEnd
 
 	BRegion background;
 	_RebuildClippingForAllWindows(background);
@@ -4636,12 +4682,20 @@ Desktop::_ScreenChanged(Screen* screen)
 	update.AddRect("frame", screen->Frame());
 	update.AddInt32("mode", screen->ColorSpace());
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4: with more than one screen the frames were updated above.
+	if (!r5MultiScreen)
+// SPDX-SnippetEnd
 	fVirtualScreen.UpdateFrame();
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 	BRect screenFrame = screen->Frame();
+	// Step 4: that screen's place on the desktop.
+	fVirtualScreen.ScreenFrameByID(screen->ID(), screenFrame);
 	for (Window* window = fAllWindows.FirstWindow(); window != NULL;
 			window = window->NextWindow(kAllWindowList)) {
 		if (window->Screen() != screen || window->IsHidden()

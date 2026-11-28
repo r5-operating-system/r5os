@@ -8,6 +8,121 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-28 - Display: round 2 DMU reachability diagnostics (MMHUB/NBIF0, VBIOS SMU wake, DisableGfxOff) and air/OS multi-screen audit
+
+- Problem (round 1 stick, `bdcdabb138`, `generated/hdmi-logs/round-1-boots-0-3.syslog`):
+  - Boot slowdown is fixed: `dcn early` dropped from ~973 ms to 139 ms per stage, and `dcn: probe` dropped from ~9.60 s to 145 ms (~11.1 s saved per boot).
+  - `smu_status` showed the SMU answers: driver mailbox `msg66 = 0x1e` (`PPSMC_MSG_GfxDeviceDriverReset`, param `2`, resp `1`), VBIOS/display mailbox `msg67 = 0x7` (`VBIOSSMC_MSG_SetDppclkFreq`, param `720`, resp `1`), `SMUIO_GFX_MISC_CNTL = 0x5` (`PWR_GFXOFF_STATUS = 2` = `ON`, not in GFXOFF), `PWR_MISC_CNTL_STATUS = 0x0`.
+  - `clk_status` showed `CLK1` answers and display clocks are running: `PLL_REQ = 0x4b`, `DISPCLK = 720 MHz`, `DPPCLK = 720 MHz`, `DPREFCLK = 598 MHz`, `DCFCLK = 399 MHz` (`bypass 0x3`, `ds_cntl = 4`, `allow_ds = 1`).
+  - Both DMU segments still timed out in ~139.3 ms: segment 1 (`DENTIST_DISPCLK_CNTL` byte `0x490`) and segment 2 (`DC_PINSTRAPS` byte `0x17500`) returned `0xffffffff` while NBIO, GC, MP0, MP1, SMUIO, and CLK1 all answered on the same BAR5.
+  - Checked Linux `v6.12` (`amdgpu_device.c`, `gmc_v9_0.c`, `mmhub_v1_0.c`, `psp_v12_0.c`, `amdgpu_dm.c`, `rn_clk_mgr_vbios_smu.c`, `smu_v12_0.c`): `dm_set_clockgating_state()` is a no-op and `gmc_v9_0_hw_init()` already accesses `DCE` (`mmVGA_HDP_CONTROL`, DMU seg 1) before PSP/SMU/DM init. Remaining candidates: whether `MMHUB` (the fabric behind which DMU sits) answers on BAR5, and whether sending Linux's `VBIOSSMC_MSG_SetDisplayCount(1)` (mission mode) or `PPSMC_MSG_DisableGfxOff` on the already-working SMU mailboxes opens DMU host access.
+- Change:
+  - `dcn21_paths.cpp`: added three targeted diagnostic paths behind `dcn_probe_path` (off by default, one per boot, protected by the fsynced crash marker, bounded waits):
+    - `bus_probe` (read-only): `NBIF0` (`mmRCC_DEV0_EPF0_STRAP0` `0x0d2f`, `mmBIF_FB_EN` `0x0e1f`; `nbio_7_0_offset.h`) and `MMHUB` (`mmMC_VM_FB_LOCATION_BASE/TOP` `0x1a82c/0x1a82d`; `mmhub_1_0_offset.h`).
+    - `vbios_smu_wake`: sends `VBIOSSMC_MSG_GetSmuVersion` (`0x2`) and `VBIOSSMC_MSG_SetDisplayCount` (`0xc`, param `1`, `rn_clk_mgr_vbios_smu.c:134, 233-246`) on the VBIOS/display mailbox (`C2PMSG_67/83/91`), then re-reads `DC_PINSTRAPS`.
+    - `smu_disable_gfxoff`: sends `PPSMC_MSG_GetSmuVersion` (`0x2`) and `PPSMC_MSG_DisableGfxOff` (`0x8`, `smu_v12_0.c:158-180`) on the driver mailbox (`C2PMSG_66/82/90`), polls `SMUIO_GFX_MISC_CNTL` for `PWR_GFXOFF_STATUS == 2` (up to 500 ms), then re-reads `DC_PINSTRAPS`.
+  - `boot-next`: added `boot-next dcndiag2` (3 boots: `bus_probe` → `vbios_smu_wake` → `smu_disable_gfxoff`, saving `~/dcndiag2/boot<n>.txt`, removing settings file after boot 3).
+  - Audited air/OS (`github.com/airos-works/haiku`, commit `3bb2bbbffd`, `DisplayLayout.{h,cpp}` and `Screen` preferences `DisplayArrangementView`/`DisplayLayoutState`): all inspected files are MIT (`Copyright 2026, Haiku, Inc.`); documented comparison and adoption plan for Step 4 in `docs/DISPLAY-DCN.md` (not ported yet while DMU bring-up is in progress).
+- Tested:
+  - `scripts/build-locked.sh` in WSL from `R5OS-hdmi-gemini`: `jam_exit=0`, `mesa_exit=0`, `ok egl vendor`.
+  - `boot-next dcndiag2` host test (`BOOT_NEXT_YES=0`): `bus_probe` → `vbios_smu_wake` → `smu_disable_gfxoff` → settings file removed, `boot1.txt`..`boot3.txt` saved.
+  - QEMU/KVM (`-cpu host -smp 2`, private copy of `r5-os.image`): booted cleanly to 1280×800 rendered screen (no AMD GPU in QEMU, so DCN skips cleanly).
+- Limits: not run on the 5625U yet; `bus_probe`, `vbios_smu_wake`, and `smu_disable_gfxoff` results await the round-2 stick.
+
+## 2026-11-28 - Display: stop DCN timeout slowdown at boot; read-only SMU, clock and DCCG diagnostics (round 1)
+
+- Problem (stick 4, `b77736dd0e`, `generated/hdmi-logs/stick-boot-57.syslog`):
+  - IP discovery on the 5625U confirmed `DMU 2.1.0` bases `0x12`, `0xc0`, `0x34c0`, `0x9000`, `0x2403c00` (identical to `renoir_ip_offset.h`, `RCC_CONFIG_MEMSIZE = 0x200`). Direct BAR5, `MM_INDEX`, and `PCIE_INDEX2` all returned `DC_PINSTRAPS 0xffffffff` in ~139 ms each.
+  - Because every non-answering DCN read hits a ~139 ms hardware bus timeout, `dcn early` (7 reads before GPU start + 7 reads after = 1.95 s) plus `dcn_probe_locked()` running `log_pipes()` (60 reads) before `check_access()` (9 reads) added **~11.55 s** per boot (9.60 s in the accelerant alone).
+  - Why DCN segment 2 does not answer while the eDP panel is lit is still open. Tracing Linux `v6.12` (`soc15.c`, `nbio_v7_0.c`, `amdgpu_cgs.c`, `amdgpu_smu.c`, `smu_v12_0.c`, `renoir_ppt.c`, `amdgpu_dm.c`, `dc.c`, `dcn21_resource.c`, `rn_clk_mgr.c`, `rn_clk_mgr_vbios_smu.c`, `dmub_dcn21.c`) rules out wrong offsets, indirect access, NBIO init, and DMCUB (`dm_dmub_hw_init()` runs after `dc_create()` / `read_pipe_fuses()` / `read_dce_straps()`). Unlike Linux, R5 never inspects or wakes SMU GFXOFF (`SMUIO_GFX_MISC_CNTL`) or the VBIOS/display SMU mailbox (`MP1_SMN_C2PMSG_67/83/91`, `SetDisplayCount`), nor has it read the `CLK1` display clock counters or a real DMU segment-1 register.
+- Change:
+  - **Boot slowdown fix:** `dcn21_early.cpp` now reads `DC_PINSTRAPS` first and stops immediately on `0xffffffff` (1 read instead of 7 per stage). `dcn_display.cpp` now runs `check_access()` before `log_pipes()`, and `dcn21_hotplug.cpp` returns immediately from `check_access()` on `DC_PINSTRAPS == 0xffffffff` without reading the four OTGs (`log_pipes()` also skips on `0xffffffff`). Expected 5625U time when DCN does not answer: ~139 ms × 2 in the kernel + ~145–160 ms in the accelerant (**~0.42 s** total, saving **~11.1 s** per boot).
+  - **Read-only diagnostics (`dcn21_paths.cpp`, `boot-next dcndiag`):** added three zero-write paths behind `dcn_probe_path` (off by default, one per boot, protected by the fsynced crash marker): `smu_status` (driver mailbox `C2PMSG_66/82/90`, VBIOS/display mailbox `C2PMSG_67/83/91`, `SMUIO_GFX_MISC_CNTL` `0x5a320`, `PWR_MISC_CNTL_STATUS` `0x5ae0c`), `clk_status` (`CLK_BASE` seg 1 `0x16e00`: `CLK1_CLK_PLL_REQ`, `CLK1_CLK0..3_CURRENT_CNT` DISPCLK/DPPCLK/DPREFCLK/DCFCLK, `BYPASS_CNTL`, `CLK1_CLK3_DS_CNTL`, `CLK1_CLK3_ALLOW_DS`, stopping on first `0xffffffff`), and `dccg_seg1` (`mmDENTIST_DISPCLK_CNTL` at DMU seg 1 byte `0x490`).
+  - Documented the stick 4 result, slowdown fix, Linux v6.12 trace, and diagnostic plan in `docs/DISPLAY-DCN.md`.
+- Tested:
+  - `scripts/build-locked.sh` in WSL from worktree `R5OS-hdmi-gemini`: `jam_exit=0`, `mesa_exit=0`, `ok egl vendor`.
+  - QEMU/KVM (`-cpu host -smp 2`, private copy of `r5-os.image`): booted to rendered 1280×800 screen (`1023992/1024000` non-black pixels) within 22 s. QEMU has no AMD GPU, so `radeon_hd` does not bind and no DCN code runs there (0 ms added).
+  - `boot-next dcndiag` host test (`BOOT_NEXT_YES=0`): boot 1 (`smu_status`) → boot 2 (`clk_status`) → boot 3 (`dccg_seg1`) → settings file removed, `boot1.txt`..`boot3.txt` saved.
+- Limits: not run on the 5625U yet; expected ~11.1 s boot-time saving and the SMU/clock/DCCG register values await the round-1 stick.
+
+## 2026-11-28 - Display: stick 3 froze; risky register paths only one per boot, behind the crash marker
+
+- Problem: stick 3 (`9ea2d26517`) froze hard during boot and left no syslog. Its kernel probe ran new paths with no crash marker (the kernel has none). Most likely cause:
+  - **My mistake:** the "direct, DMU segment 0x12/0xC0 + DC_PINSTRAPS" reads were no display registers. They lie in GFX register space (dwords `0x2892`, `0x2940`), which can hang the machine while GFX is power-gated before the driver's GPU start; Linux sends `DisableGfxOff` first.
+  - **Second suspect:** `PCIE_INDEX2` with an MMIO offset as SMN address.
+  - **Lowest risk:** the `MM_INDEX` VRAM read for the discovery table, which Linux does at init on Renoir.
+  - Not proven: there is no log.
+- Change:
+  - `dcn21_early.cpp` is back to stick 2's direct segment-2 reads (known safe) plus a timing line.
+  - The paths moved to the accelerant (`dcn21_paths.cpp`): `discovery`, `mm_index`, `pcie_index2`. Each runs only when `dcn_probe_path <name>` names it, at most one per boot, after a log line and with the crash marker armed (`fsync`) under its name. A hang is named by the next start and not repeated with the same settings.
+  - The segment-0/1 reads are removed. Segment-1 DCCG registers are read only once segment 2 answers.
+  - `boot-next dcnpath` runs discovery, then mm_index, then pcie_index2, one per boot.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0` (with the review fixes of the entry below); one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs); `boot-next dcnpath` host test: discovery, mm_index, pcie_index2, then the settings file removed. Not on the 5625U.
+
+## 2026-11-28 - Display: review fixes (DCCG register segment, all-ones checks, full teardown, step 4 frames)
+
+- Problem: Gemini's review of PR 4712 at `fb2ccad8dc` (`generated/HDMI-PR4712-REVIEW-GEMINI.md`). Each finding was checked against Linux v6.12 here.
+- Mistake fixed: `DENTIST_DISPCLK_CNTL`, `OTGn_PIXEL_RATE_CNTL` and `PHYPLLA_PIXCLK_RESYNC_CNTL` have `BASE_IDX 1` (DMU segment 1, `0xC0`; `dcn_2_1_0_offset.h`), not 2. `dcn21_regs.h` said every register was segment 2; steps 2a and 2 read those three at the wrong address, and step 2 would have written the resync register at the wrong address. Now `DCN21_SEG1_BYTES`.
+- Fixed:
+  - **All ones:** never counts as a set bit in `dcn21_wait_set()`; `dcn21_update()` does not write back a value read as all ones and stops the start; the pipe log says `does not answer` instead of `on`; the DDC bit-bang does not write a pad that stops answering.
+  - **Crash marker:** a marker that cannot be written stops the step.
+  - **Teardown:** a failed step 2 now undoes everything it turned on, in reverse order: PHY, DIG back-end select, OTG (`optc1_disable_crtc`: master off, VTG off, up to 100 ms for `OTG_BUSY`), DPG, OPP clock, OTG and OPTC clocks, and the PLL (`setpixelclock` with pixel clock 0, as `dce110_clock_source_power_down` does).
+  - **Bounds:** the `gpio_pin_lut` lookup is bounds-checked against the VBIOS size.
+  - **EDID:** timings with zero active size or zero sync width are refused; the monitor name is printable ASCII only.
+  - **DMCUB:** step 2 does not start while the firmware's DMCUB runs (Linux sends these VBIOS tables through the DMCUB).
+  - **Step 4 frames:** `VirtualScreen::UpdateFrame()` places the screens again after a mode change.
+  - **Step 4 locking:** `Desktop::_ScreenChanged()` updates the frames once, under `fScreenLock`.
+  - **Test output:** its screen id is set before its dump thread starts.
+  - **Settings generation:** includes nanoseconds.
+  - **AMD MIT attribution:** in `dcn21_regs.h` and `THIRD_PARTY_NOTICES.md`.
+  - **VSTARTUP comment:** corrected.
+- Not changed, with reason:
+  - `AS_GET_MONITOR_INFO` with an unknown id still answers for the main screen, as Haiku does, so one screen behaves as before.
+  - The stick 3 probe (`dcn21_early.cpp`) is not changed: that stick is already built.
+- On the all-ones reads, the review's hypothesis is that Linux's SMU and NBIO init (`smu_hw_init`, `PPSMC_MSG_DisableGfxOff`) opens the display before `read_dce_straps()`. The stick 3 probe's indirect paths test the register path first. If every path stays all ones, the power state is the next round.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0` (with the review fixes of the entry below); one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs); `boot-next dcnpath` host test: discovery, mm_index, pcie_index2, then the settings file removed. Not on the 5625U.
+
+## 2026-11-28 - Display: find the path to the display registers (stick 2 result, probe for stick 3)
+
+- Stick 2 (`fb2ccad8dc`, 5625U): no hang; the gate kept DCN off on all three boots (`registers do not answer: DC_PINSTRAPS 0xffffffff (smu response 0x00000001)`). The kernel read all ones already before the GPU start, so the mode-2 reset is not the cause; the SMU mailbox answers through the same mapping.
+- Checked against Linux v6.12: Linux takes Renoir's register bases from the IP discovery table (`amdgpu_discovery_set_ip_blocks`, default case), its display code uses the static `DMU_BASE` (`dcn21_resource.c`), and registers below `rmmio_size` (BAR5, 512 KiB) are read directly (`amdgpu_device_rreg`), as R5 does. Linux reads the memory size for the table at `mmRCC_CONFIG_MEMSIZE` dword `0xde3`; R5's `radeon_hd_init` reads the old byte offset `0x5428` (all ones here).
+- Change: `dcn21_early.cpp` (before the GPU start) reads `DC_PINSTRAPS` through every path and logs which answers: direct with each DMU segment, the DMU base from the IP discovery table (read through `MM_INDEX`/`MM_INDEX_HI`/`MM_DATA` at `RCC_CONFIG_MEMSIZE << 20 - 64 KiB`), indirect `MM_INDEX`/`MM_DATA`, indirect `PCIE_INDEX2`/`PCIE_DATA2`, and `MM_INDEX`/`MM_DATA` through I/O BAR 4. The only writes are the bus interface's index registers, put back after; nothing in DCN is written. Each kernel probe logs its time, and the accelerant logs `radeon_hd: dcn: probe took N us`.
+- Time: the kernel probes are register reads (microseconds) plus the discovery read through MM_INDEX (a few thousand index writes and reads, logged); the accelerant adds the crash marker's fsync on the stick plus some register reads. Measured numbers come from stick 3.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0` (the kernel probe; the accelerant timing line was compiled on its own with the build's compiler, no warnings); one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs). Not on the 5625U.
+
+## 2026-11-28 - Display: no DCN write before the display registers answer (stick 1 froze)
+
+- Problem (first 5625U stick of PR 4712, commit `2b017df33a`, HDMI monitor attached): every DCN register the accelerant read was `0xffffffff`. The probe took that as data (`dmcub (running)`, `sense 1 pin 1`) and bit-banged the DDC pad, which writes DCN GPIO registers; the machine froze. The crash marker kept the next two boots alive; after `boot-next hdmi` changed the settings it froze once more, as designed. Mistake: the code wrote to registers it had not checked.
+- Checked, not the cause: the addresses equal Linux's (`DMU_BASE` seg 2 `0x34C0`, `dcn_2_1_0_offset.h`, (base + offset) × 4); the accelerant uses the kernel's own BAR5 mapping (512 KiB, all offsets inside, the mapping the GFX9 ring uses); Linux reads these directly; Linux also sends the mode-2 reset at init on Renoir (`soc15_need_reset_on_init`). Why DCN answers all ones is open.
+- Change: a read-only gate (`check_access`) before any DCN write: `DC_PINSTRAPS` (the first register Linux reads, `read_dce_straps`) must not be all ones, and one OTG must be on with a real horizontal total; otherwise `radeon_hd: dcn: registers do not answer: ...` and DCN is off for the boot. All-ones values no longer count as HPD high or DMCUB running; the DDC bit-bang refuses a pad that reads all ones. The gate logs the SMU mailbox response read through the same mapping. New `dcn21_early.cpp` in the kernel logs `radeon_hd: dcn early: before gpu start / after gpu start` (DC_PINSTRAPS, DMCUB, OTG 0 to 3; reads only) so the next boot shows when DCN stops answering. Step 4 writes no DCN register and is unchanged.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`; one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs); `boot-next hdmi` host test saves the new `radeon_hd: dcn` lines. Not on the 5625U: whether the gate holds and what the early probe shows needs the next stick (a fresh image: stick 1 holds the crash marker for its settings).
+
+## 2026-11-27 - Display step 4: app_server with more than one screen (opt-in), test screen in memory
+
+- Problem: Haiku's app_server has the classes for more than one screen (ScreenManager, VirtualScreen, BScreen ids) but stops at TODOs: one interface, one drawing engine, only the main screen id, frames always at (0, 0), the pointer kept on the main screen.
+- Change: with `multi_screen true` in the radeon_hd settings, ScreenManager adds further outputs as screens (`R5OutputHWInterface`); VirtualScreen places them right of the main screen and hands them to the main interface; the main back buffer covers the whole desktop; `HWInterface::_CopyToFront()` splits every front write (copies, software cursor, cursor restore) between the screens. Desktop, ServerApp (`AS_VALID_SCREEN_ID`, `AS_GET_NEXT_SCREEN_ID`, `AS_GET_MONITOR_INFO`), input_server (relative pointer over the desktop, absolute devices on the main screen) and the Display page (every screen through `BScreen::SetToNext()`) follow. The compositor composes the whole desktop; its direct GPU scanout and the GPU back-to-front copy are off with more than one screen, as is the hardware cursor. `multi_screen_test_output <w>x<h>` adds a screen in memory that writes `/tmp/r5-screen-<id>.ppm`. `boot-next hdmi` has a boot 3 for it. Copied from Haiku into `distro/` for this: `drawing/HWInterface.{h,cpp}`, `ScreenManager.cpp`.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`; QEMU/KVM (Lavapipe compositor, `-vga std` 1280x800) with `multi_screen true` and a 1280x720 test screen planted with `bfs_shell`: syslog `app_server: multi_screen: 1 more screen(s), desktop 2560x800, back buffer 2560x800: No error`; the main screen showed the first-start window as before (screendump); after a clean shutdown, `/tmp/r5-screen-1.ppm` read out of the image showed the desktop colour and the pointer cut at the seam (its left part on the main screen at x 1279, the rest on the test screen at x 0). An earlier run wrote the dump to `/var/tmp`, which R5 does not have; fixed to `/tmp`. Not tested: a window dragged onto the second screen (QEMU's tablet maps onto the main screen by design), the Display page with two screens, the RADV compositor; `boot-next hdmi` host test, three boots.
+- Limits: screens side by side, top aligned, not movable from the Display page yet; the Display page's mode menus set the main screen; wallpaper, Tracker desktop and Deskbar on the main screen; CPU copy to every screen; a real second monitor needs step 3. Not run on the 5625U.
+
+## 2026-11-27 - Display step 2: HDMI test pattern on a free pipe (opt-in), pipe log, crash marker
+
+- Problem: step 1 only reads HDMI. The owner asked for the later steps too, with the display code per DCN version inside radeon_hd, complete like Linux DC, and isolated so a DCN failure cannot take the GPU or the panel with it.
+- Change, layout: the accelerant's DCN code is now `dcn_display.cpp` (version table from the radeon_hd device table's display version, crash marker, DCN lock, switch-off, VBIOS and EDID helpers) plus `dcn21_hotplug.cpp`, `dcn21_head.cpp` and `dcn21_regs.h` behind one `dcn_ops` table. `r5_dcn_hdmi.*` from step 1 moved there unchanged in behaviour.
+- Change, step 2a (reads only, with the step 1 switch): logs DMCUB, the DISPCLK divider, every OTG, HUBP surface, OPP/FMT/DPG and DIG, and the VBIOS display table revisions (`radeon_hd: dcn head:` lines).
+- Change, step 2 (`dcn_hdmi_modeset true`, off by default): Linux DC's sequence for a stream without a plane on DCN 2.1, step by step (`dce110_apply_single_controller_ctx_to_hw`, `dcn20_enable_stream_timing`, `optc1/optc2`, `opp1/opp2`, `link_set_dpms_on`), on the first OTG the firmware left off, DVI signalling, VBIOS `setpixelclock` v1.7, `digxencodercontrol` v1.5 and `dig1transmittercontrol` v1.6, COMBO PHY PLL0, DPG colour squares. The panel's OTG and DIG are excluded by checks. Differences from Linux are listed in `docs/DISPLAY-DCN.md` (DVI instead of HDMI signalling, no DISPCLK/watermark update, global sync without DML, no DMCUB, no init_hw, an added frame-counter check).
+- Change, isolation: every wait has Linux's limit, every step returns an error, a failed step turns its OTG and PHY off and switches DCN off for the boot. A crash marker (`/boot/system/settings/radeon_hd_dcn_marker`, fsynced) is armed around each step; a later start that finds it armed keeps DCN off until the radeon_hd settings change.
+- Change, stick: `boot-next hdmi` (boot 1: step 1 and 2a; boot 2: `dcn_hdmi_modeset true`; then the file is removed), saving the `dcn` syslog lines of each boot in `~/hdmi/boot<n>.txt`. Host-tested with `BOOT_NEXT_YES=0`.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`; a single-file recompile of `dcn_display.cpp` after a format-truncation warning fix, no warnings; one QEMU/KVM boot reached the first-start window as before (no AMD GPU, so no DCN code runs); `boot-next hdmi` host test with `BOOT_NEXT_YES=0`.
+- Limits: nothing of steps 1, 2a or 2 has run on the 5625U. Whether the Haiku atom interpreter runs the atomfirmware display tables, whether the pixel clock reaches the OTG, and whether the monitor accepts the picture are unproven. Steps 3 (scanout of a buffer, watermarks, DISPCLK) and 4 (app_server with two screens, Display page) are designed, not written: they depend on what the step 2a and 2 boot reports.
+
+## 2026-11-27 - Display step 1: HDMI hotplug and EDID on DCN 2.1 (logged only)
+
+- Problem: the owner wants a second screen on the 5625U's HDMI port. R5 has never programmed the display engine (DCN 2.1); the panel runs on the firmware (GOP) picture and HDMI stays dark. The accelerant already reads the VBIOS display paths (HDMI A is path 1, I2C id `0x91`, HPD pin `0x2` in the boot 55 syslog), but found no I2C or HPD pin for any connector.
+- Found: `gpio_general_populate()` reads the atomfirmware `gpio_pin_lut` with the old 4-byte entry; the v2.1 entry is 8 bytes (`atomfirmware.h`), so every pin came out as `hwPin 0x0`. Not changed here (the DCE paths use that function); step 1 reads the table itself.
+- Change: design `docs/DISPLAY-DCN.md` (steps 1 to 4, registers, firmware, risks, tests, kernel interface, licence check of the Linux DC files: all MIT). New `r5_dcn_hdmi.cpp` in the radeon_hd accelerant: once at start, for each HDMI and DVI connector on a DCN 2.1 GPU, it maps the VBIOS I2C and HPD ids to a DDC pad and HPD number the way Linux `bios_parser2.c` and `hw_translate_dcn21.c` do, reads `DC_GPIO_HPD_Y` and `HPDn_DC_HPD_CONTROL/INT_STATUS`, reads the EDID by bit-banging that DDC pad (its MASK, A and EN registers are saved and put back), and logs `radeon_hd: dcn hdmi: ...` lines (connector, pad, HPD, connected yes or no, monitor name, vendor, preferred mode). `gDisplay[]` is not changed, so app_server and the Display page see the same screens as before. On by default on DCN 2.1 only; `dcn_hdmi_probe false` in the radeon_hd settings turns it off. `scripts/apply-radeon.py` copies the two new files.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`; one QEMU/KVM boot of a copy of that image reached the first-start window as before. QEMU has no AMD GPU, so `radeon_hd` did not bind and no `dcn hdmi` line was written (expected).
+- Limits: not run on the 5625U. Whether HPD, the DDC pad mapping and the EDID read work on the HDMI port is unproven until a boot with a monitor attached. HPD sense counts only if the firmware enabled the HPD block; the GPIO pin is logged as well. Nothing is shown on HDMI yet (step 2).
+
 ## 2026-11-27 - Text: grey again in the R5 look (subpixel lost stems on the 5625U)
 
 - Problem (stick 56, 5625U, owner's screenshots): with slight hinting the spacing was right, but subpixel text still had strong yellow and blue fringes and lost thin vertical stems ("Acjust", "Cesktop", "Mcunt") in all app_server text. The QEMU check of the entry below did not prove subpixel: on Lavapipe the text looked grey. With subpixel off in Appearance → Antialiasing the owner confirmed the text is clearly better.

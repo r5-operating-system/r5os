@@ -1208,7 +1208,9 @@ DisplayView::_UpdatePicture()
 		caption.ReplaceFirst("%number%", number.String());
 	}
 	fScreens->SetCaption(caption.String());
-	fScreens->SetDraggable(screens.CountItems() > 1);
+	// Step 4 places the screens side by side; moving them here does not
+	// reach app_server yet (docs/DISPLAY-DCN.md), so the tiles do not move.
+	fScreens->SetDraggable(false);
 
 	// With one screen the title has no number.
 	BString title;

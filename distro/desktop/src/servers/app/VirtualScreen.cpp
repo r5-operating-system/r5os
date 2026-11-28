@@ -6,6 +6,12 @@
  *		Axel Dörfler, axeld@pinc-software.de
  */
 
+/*
+ * R5OS modifications in this file are MIT, like the original work. They are
+ * wrapped in SPDX-Snippet markers. The copyright and license notice above still
+ * cover the original work.
+ */
+
 
 #include "VirtualScreen.h"
 
@@ -13,6 +19,12 @@
 #include "Desktop.h"
 
 #include <new>
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Region.h>
+// SPDX-SnippetEnd
 
 
 VirtualScreen::VirtualScreen()
@@ -146,15 +158,32 @@ VirtualScreen::AddScreen(Screen* screen, const ScreenConfigurations& configurati
 		}
 	}
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4 (docs/DISPLAY-DCN.md): the first screen is the main screen at
+	// (0, 0) and owns the drawing engine and the drawing buffer of the whole
+	// desktop. Every further screen sits right of the one before, top
+	// aligned. UpdateFrame() hands them to the main screen's interface.
+	BRect frame = screen->Frame();
+	if (fScreenList.CountItems() == 0) {
+		fDrawingEngine = screen->GetDrawingEngine();
+		fHWInterface = screen->HWInterface();
+	} else {
+		float right = 0;
+		for (int32 i = 0; i < fScreenList.CountItems(); i++)
+			right = max_c(right, fScreenList.ItemAt(i)->frame.right + 1);
+		frame.OffsetTo(right, 0);
+	}
+	item->frame = frame;
+
 	monitor_info info;
 	bool hasInfo = screen->GetMonitorInfo(info) == B_OK;
-	currentConfigurations.Set(screen->ID(), hasInfo ? &info : NULL, screen->Frame(), mode);
-
-	// TODO: this works only for single screen configurations
-	fDrawingEngine = screen->GetDrawingEngine();
-	fHWInterface = screen->HWInterface();
-	fFrame = screen->Frame();
-	item->frame = fFrame;
+	currentConfigurations.Set(screen->ID(), hasInfo ? &info : NULL, frame,
+		mode);
+	fFrame = fFrame.IsValid() && fScreenList.CountItems() > 0
+		? (fFrame | frame) : frame;
+// SPDX-SnippetEnd
 
 	fScreenList.AddItem(item);
 
@@ -188,22 +217,45 @@ VirtualScreen::SetOffscreen(::HWInterface* interface, ::DrawingEngine* engine,
 void
 VirtualScreen::UpdateFrame()
 {
-	int32 virtualWidth = 0, virtualHeight = 0;
-
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4: the desktop is the union of the screens at their places, as
+	// the TODO here asked; the main screen's interface gets the others.
+	BRect frame;
+	HWInterface::r5_output outputs[HWInterface::kR5MaxOutputs];
+	int32 outputCount = 0;
 	for (int32 i = 0; i < fScreenList.CountItems(); i++) {
-		Screen* screen = fScreenList.ItemAt(i)->screen;
-
+		screen_item* item = fScreenList.ItemAt(i);
 		uint16 width, height;
 		uint32 colorSpace;
 		float frequency;
-		screen->GetMode(width, height, colorSpace, frequency);
-
-		// TODO: compute virtual size depending on the actual screen position!
-		virtualWidth += width;
-		virtualHeight = max_c(virtualHeight, height);
+		item->screen->GetMode(width, height, colorSpace, frequency);
+		// The same placement as AddScreen(): a new mode on one screen
+		// moves the ones right of it (review, 28 Nov 2026).
+		if (i == 0)
+			item->frame.OffsetTo(0, 0);
+		else
+			item->frame.OffsetTo(frame.right + 1, 0);
+		item->frame.right = item->frame.left + width - 1;
+		item->frame.bottom = item->frame.top + height - 1;
+		frame = i == 0 ? item->frame : (frame | item->frame);
+		if (i > 0 && outputCount < HWInterface::kR5MaxOutputs
+			&& item->screen->HWInterface() != NULL
+			&& item->screen->HWInterface()->FrontBuffer() != NULL) {
+			outputs[outputCount].front
+				= item->screen->HWInterface()->FrontBuffer();
+			outputs[outputCount].left = (int32)item->frame.left;
+			outputs[outputCount].top = (int32)item->frame.top;
+			outputCount++;
+		}
 	}
-
-	fFrame.Set(0, 0, virtualWidth - 1, virtualHeight - 1);
+	fFrame = frame;
+	if (fHWInterface != NULL && fScreenList.CountItems() > 0) {
+		fHWInterface->R5SetOutputs(outputs, outputCount,
+			frame.IntegerWidth() + 1, frame.IntegerHeight() + 1);
+	}
+// SPDX-SnippetEnd
 }
 
 
@@ -230,14 +282,13 @@ VirtualScreen::ScreenAt(int32 index) const
 Screen*
 VirtualScreen::ScreenByID(int32 id) const
 {
-	for (int32 i = fScreenList.CountItems(); i-- > 0;) {
-		screen_item* item = fScreenList.ItemAt(i);
-
-		if (item->screen->ID() == id || id == B_MAIN_SCREEN_ID.id)
-			return item->screen;
-	}
-
-	return NULL;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	// Step 4: the exact id; B_MAIN_SCREEN_ID is the first screen. With one
+	// screen this is what the loop here returned.
+	return ScreenByExactID(id);
+// SPDX-SnippetEnd
 }
 
 
@@ -257,6 +308,81 @@ VirtualScreen::CountScreens() const
 {
 	return fScreenList.CountItems();
 }
+
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+Screen*
+VirtualScreen::ScreenByExactID(int32 id) const
+{
+	if (id == B_MAIN_SCREEN_ID.id)
+		return ScreenAt(0);
+	for (int32 i = 0; i < fScreenList.CountItems(); i++) {
+		if (fScreenList.ItemAt(i)->screen->ID() == id)
+			return fScreenList.ItemAt(i)->screen;
+	}
+	return NULL;
+}
+
+
+bool
+VirtualScreen::ScreenFrameByID(int32 id, BRect& frame) const
+{
+	for (int32 i = 0; i < fScreenList.CountItems(); i++) {
+		screen_item* item = fScreenList.ItemAt(i);
+		if (item->screen->ID() == id || (i == 0 && id == B_MAIN_SCREEN_ID.id)) {
+			frame = item->frame;
+			return true;
+		}
+	}
+	return false;
+}
+
+
+bool
+VirtualScreen::NextScreenID(int32 id, int32& next) const
+{
+	for (int32 i = 0; i + 1 < fScreenList.CountItems(); i++) {
+		screen_item* item = fScreenList.ItemAt(i);
+		if (item->screen->ID() == id || (i == 0 && id == B_MAIN_SCREEN_ID.id)) {
+			next = fScreenList.ItemAt(i + 1)->screen->ID();
+			return true;
+		}
+	}
+	return false;
+}
+
+
+void
+VirtualScreen::GetScreenRegion(BRegion& region) const
+{
+	region.MakeEmpty();
+	for (int32 i = 0; i < fScreenList.CountItems(); i++)
+		region.Include(fScreenList.ItemAt(i)->frame);
+}
+
+
+Screen*
+VirtualScreen::ScreenFor(BRect frame) const
+{
+	// The screen that holds most of the frame; the main screen otherwise.
+	Screen* best = ScreenAt(0);
+	float bestArea = 0;
+	for (int32 i = 0; i < fScreenList.CountItems(); i++) {
+		screen_item* item = fScreenList.ItemAt(i);
+		BRect part = item->frame & frame;
+		if (!part.IsValid())
+			continue;
+		float area = (part.Width() + 1) * (part.Height() + 1);
+		if (area > bestArea) {
+			bestArea = area;
+			best = item->screen;
+		}
+	}
+	return best;
+}
+// SPDX-SnippetEnd
 
 
 status_t

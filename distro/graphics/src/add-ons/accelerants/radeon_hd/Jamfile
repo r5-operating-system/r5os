@@ -26,6 +26,10 @@ Addon radeon_hd.accelerant :
 	hooks.cpp
 	mode.cpp
 	pll.cpp
+	dcn_display.cpp
+	dcn21_head.cpp
+	dcn21_hotplug.cpp
+	dcn21_paths.cpp
 	ringqueue.cpp
 	: be libaccelerantscommon.a [ TargetLibsupc++ ]
 ;

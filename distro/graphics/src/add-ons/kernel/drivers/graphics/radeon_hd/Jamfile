@@ -19,6 +19,7 @@ KernelAddon radeon_hd :
 	r5_gpu.cpp
 	r5_passport.cpp
 	r5_smu12.cpp
+	dcn21_early.cpp
 	r5_gpu_core.cpp
 	sensors.cpp
 	: libgraphicscommon.a

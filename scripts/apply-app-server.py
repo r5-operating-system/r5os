@@ -49,6 +49,11 @@ def main() -> int:
     copy("app_server-Jamfile", app / "Jamfile")
     # SkiaDrawingEngine needs to know which HWInterface it is bound to.
     copy("drawing/Jamfile", app / "drawing" / "Jamfile")
+    # Display step 4 (docs/DISPLAY-DCN.md): more than one screen.
+    copy("drawing/HWInterface.h", app / "drawing" / "HWInterface.h")
+    copy("drawing/HWInterface.cpp", app / "drawing" / "HWInterface.cpp")
+    copy("R5OutputHWInterface.h", local / "R5OutputHWInterface.h")
+    copy("R5OutputHWInterface.cpp", local / "R5OutputHWInterface.cpp")
     copy("drawing/Painter/Jamfile", app / "drawing" / "Painter" / "Jamfile")
     copy("drawing/Painter/Painter.cpp", app / "drawing" / "Painter" / "Painter.cpp")
     copy("drawing/Painter/bitmap_painter/DrawBitmapBilinear.h",

@@ -13,6 +13,11 @@
 #include "ScreenManager.h"
 
 #include <Message.h>
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+#include <Region.h>
+// SPDX-SnippetEnd
 
 
 class Desktop;
@@ -61,6 +66,19 @@ public:
 			Screen*				ScreenByID(int32 id) const;
 			BRect				ScreenFrameAt(int32 index) const;
 			int32				CountScreens() const;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+			// Step 4 (docs/DISPLAY-DCN.md): the screen with this id (exact;
+			// B_MAIN_SCREEN_ID is the first), its place on the desktop, the
+			// id after it, and the screen that holds most of a frame.
+			Screen*				ScreenByExactID(int32 id) const;
+			bool				ScreenFrameByID(int32 id, BRect& frame) const;
+			bool				NextScreenID(int32 id, int32& next) const;
+			Screen*				ScreenFor(BRect frame) const;
+			// The union of the screens (not the bounding rectangle).
+			void				GetScreenRegion(BRegion& region) const;
+// SPDX-SnippetEnd
 
 private:
 			status_t			_GetMode(Screen* screen,

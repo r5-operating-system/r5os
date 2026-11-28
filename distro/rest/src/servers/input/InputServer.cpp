@@ -73,6 +73,14 @@ KeymapMethod InputServer::gKeymapMethod;
 static BLocker sEventStateLocker("is_event_state");
 static BLocker sInputStateLocker("is_input_state");
 static thread_id sEventLoopThread = -1;
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+// Display step 4 (docs/DISPLAY-DCN.md): fFrame is the whole desktop, which
+// may be more than one screen. A device with absolute coordinates (touch
+// screen, tablet) maps onto the main screen.
+static BRect sMainFrame(0, 0, 799, 599);
+// SPDX-SnippetEnd
 // SPDX-SnippetEnd
 
 
@@ -259,6 +267,11 @@ InputServer::_InitKeyboardMouseStates()
 	fFrame = fScreen.Frame();
 	if (fFrame == BRect(0, 0, 0, 0))
 		fFrame = BRect(0, 0, 799, 599);
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+	sMainFrame = fFrame;
+// SPDX-SnippetEnd
 	fMousePos = BPoint((int32)((fFrame.right + 1) / 2),
 		(int32)((fFrame.bottom + 1) / 2));
 
@@ -664,8 +677,11 @@ InputServer::MessageReceived(BMessage* message)
 // SPDX-SnippetCopyrightText: 2026 R5OS Contributors
 // SPDX-License-Identifier: MIT
 			BPoint pos;
+			BRect mainFrame = fScreen.Frame();
 			{
 				BAutolock _(sInputStateLocker);
+				if (mainFrame.IsValid() && mainFrame != BRect(0, 0, 0, 0))
+					sMainFrame = mainFrame;
 				if (frame == fFrame)
 					break;
 
@@ -1904,8 +1920,12 @@ InputServer::_SanitizeEvents(EventList& events)
 					// convert them to absolute screen position
 					// (the message is supposed to contain the original
 					// absolute coordinates as "be:tablet_x/y").
-					where.x = absX * fFrame.Width();
-					where.y = absY * fFrame.Height();
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 R5OS Contributors
+// SPDX-License-Identifier: MIT
+					where.x = sMainFrame.left + absX * sMainFrame.Width();
+					where.y = sMainFrame.top + absY * sMainFrame.Height();
+// SPDX-SnippetEnd
 
 					event->RemoveName("x");
 					event->RemoveName("y");
