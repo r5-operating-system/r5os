@@ -27,6 +27,7 @@
 #include <unistd.h>
 
 #include <Debug.h>
+#include <OS.h>
 #include <FindDirectory.h>
 #include <driver_settings.h>
 
@@ -456,7 +457,11 @@ dcn_display_probe()
 	pthread_mutex_lock(&sDcnLock);
 	if (!sDone) {
 		sDone = true;
+		// The time the display track adds to the accelerant's start (the
+		// crash marker's fsync on a USB stick is most of it).
+		bigtime_t start = system_time();
 		dcn_probe_locked();
+		DCNLOG("probe took %" B_PRId64 " us\n", system_time() - start);
 	}
 	pthread_mutex_unlock(&sDcnLock);
 }

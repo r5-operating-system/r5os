@@ -8,6 +8,14 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-28 - Display: find the path to the display registers (stick 2 result, probe for stick 3)
+
+- Stick 2 (`fb2ccad8dc`, 5625U): no hang; the gate kept DCN off on all three boots (`registers do not answer: DC_PINSTRAPS 0xffffffff (smu response 0x00000001)`). The kernel read all ones already before the GPU start, so the mode-2 reset is not the cause; the SMU mailbox answers through the same mapping.
+- Checked against Linux v6.12: Linux takes Renoir's register bases from the IP discovery table (`amdgpu_discovery_set_ip_blocks`, default case), its display code uses the static `DMU_BASE` (`dcn21_resource.c`), and registers below `rmmio_size` (BAR5, 512 KiB) are read directly (`amdgpu_device_rreg`), as R5 does. Linux reads the memory size for the table at `mmRCC_CONFIG_MEMSIZE` dword `0xde3`; R5's `radeon_hd_init` reads the old byte offset `0x5428` (all ones here).
+- Change: `dcn21_early.cpp` (before the GPU start) reads `DC_PINSTRAPS` through every path and logs which answers: direct with each DMU segment, the DMU base from the IP discovery table (read through `MM_INDEX`/`MM_INDEX_HI`/`MM_DATA` at `RCC_CONFIG_MEMSIZE << 20 - 64 KiB`), indirect `MM_INDEX`/`MM_DATA`, indirect `PCIE_INDEX2`/`PCIE_DATA2`, and `MM_INDEX`/`MM_DATA` through I/O BAR 4. The only writes are the bus interface's index registers, put back after; nothing in DCN is written. Each kernel probe logs its time, and the accelerant logs `radeon_hd: dcn: probe took N us`.
+- Time: the kernel probes are register reads (microseconds) plus the discovery read through MM_INDEX (a few thousand index writes and reads, logged); the accelerant adds the crash marker's fsync on the stick plus some register reads. Measured numbers come from stick 3.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0` (the kernel probe; the accelerant timing line was compiled on its own with the build's compiler, no warnings); one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs). Not on the 5625U.
+
 ## 2026-11-28 - Display: no DCN write before the display registers answer (stick 1 froze)
 
 - Problem (first 5625U stick of PR 4712, commit `2b017df33a`, HDMI monitor attached): every DCN register the accelerant read was `0xffffffff`. The probe took that as data (`dmcub (running)`, `sense 1 pin 1`) and bit-banged the DDC pad, which writes DCN GPIO registers; the machine froze. The crash marker kept the next two boots alive; after `boot-next hdmi` changed the settings it froze once more, as designed. Mistake: the code wrote to registers it had not checked.
