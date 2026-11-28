@@ -53,6 +53,9 @@ struct dcn_ops {
 	// hardware can have; otherwise why, and nothing may write a DCN
 	// register this boot.
 	status_t	(*check_access)(char* why, size_t whySize);
+	// Diagnosis: one other way into the registers, by name; only when
+	// `dcn_probe_path` names it (dcn21_paths.cpp).
+	status_t	(*probe_path)(const char* name);
 	// Step 2: light the connector on a free pipe (opt-in).
 	status_t	(*head_start)(const dcn_connector_state* state,
 					const edid1_info* edid);

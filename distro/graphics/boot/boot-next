@@ -130,6 +130,88 @@ if [ "$1" = cs35l41 ] || { [ -z "$1" ] && [ -f "$ampfile" ] \
 	exit 0
 fi
 
+# Display register paths (docs/DISPLAY-DCN.md, "Register access"):
+# "boot-next dcnpath" starts it, and a radeon_hd settings file with a
+# dcn_path_boot line continues it. One diagnostic path per boot, the one
+# Linux itself uses at init first: boot 1 dcn_probe_path discovery, boot 2
+# mm_index, boot 3 pcie_index2; then the file is removed. The accelerant
+# arms the crash marker with the path's name before the access, so a boot
+# that hangs is named by the next start ("did not finish step path-...").
+# Before each step the dcn lines of the boot that ran are saved in
+# ~/dcnpath/boot<n>.txt. The note is ~/dcnpath/next.
+if [ "$1" = dcnpath ] || { [ -z "$1" ] && [ -f "$file" ] \
+		&& grep -q '^dcn_path_boot' "$file"; }; then
+	dp=$home/dcnpath
+	mkdir -p "$dp" "$(dirname "$file")"
+	if [ "$1" = dcnpath ]; then
+		cur=0
+		next=1
+	else
+		cur=$(sed -n 's/^dcn_path_boot[[:space:]]*\([123]\).*/\1/p' \
+			"$file" | head -n 1)
+		case $cur in
+		1) next=2 ;;
+		2) next=3 ;;
+		3) next=done ;;
+		*)
+			echo "FAIL dcnpath: unknown boot '$cur' in $file"
+			exit 1
+			;;
+		esac
+	fi
+	if [ "$cur" != 0 ]; then
+		grep -E 'radeon_hd: dcn' "${R5_SYSLOG:-/var/log/syslog}" \
+			> "$dp/boot$cur.txt" 2>/dev/null
+		echo "boot-next: saved $(wc -l < "$dp/boot$cur.txt") lines in" \
+			"$dp/boot$cur.txt"
+	fi
+	rm -f "$file"
+	case $next in
+	1) want=discovery ;;
+	2) want=mm_index ;;
+	3) want=pcie_index2 ;;
+	done) want= ;;
+	esac
+	if [ -n "$want" ]; then
+		{
+			echo "dcn_probe_path $want"
+			echo "dcn_path_boot $next"
+		} > "$file"
+		# Read the file back: a typo here is a lost boot.
+		if ! grep -q "^dcn_probe_path $want\$" "$file"; then
+			echo "FAIL dcnpath: $file does not say dcn_probe_path $want"
+			exit 1
+		fi
+	elif [ -f "$file" ]; then
+		echo "FAIL dcnpath: $file is still there"
+		exit 1
+	fi
+	echo "$next" > "$dp/next"
+	if [ -n "$want" ]; then
+		echo "boot-next: next boot is dcnpath boot $next ($want)"
+	else
+		echo "boot-next: dcnpath done, settings file removed"
+	fi
+	echo "boot-next: settings file $file"
+	if [ "${BOOT_NEXT_YES:-1}" = 0 ] || [ "$next" = done ]; then
+		echo PASS
+		exit 0
+	fi
+	printf 'boot-next: restart? [y] '
+	read ans
+	if [ "$ans" != y ]; then
+		echo "FAIL not restarted (the settings are written)"
+		exit 1
+	fi
+	echo PASS
+	sync
+	if ! shutdown -r; then
+		echo "FAIL shutdown -r did not start"
+		exit 1
+	fi
+	exit 0
+fi
+
 # HDMI display stick (docs/DISPLAY-DCN.md, PR 4712): "boot-next hdmi"
 # starts it, and a radeon_hd settings file with a dcn_hdmi_boot line
 # continues it. Before each step the dcn lines of the boot that ran are saved

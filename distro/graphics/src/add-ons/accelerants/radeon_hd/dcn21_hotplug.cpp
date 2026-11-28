@@ -281,11 +281,15 @@ static const dcn21_table_name kTables[] = {
 static void
 dcn21_log_pipes()
 {
+	// Segment 1 (the DCCG) is read only when segment 2, which sticks 1 and 2
+	// showed is safe to read, answers; until then segment 1 is unproven.
+	bool seg2Answers = !dcn21_all_ones(dcn21_read(DCN21_DC_PINSTRAPS));
 	uint32 dmcub = dcn21_read(DCN21_DMCUB_CNTL);
 	HEADLOG("dmcub cntl 0x%08" B_PRIx32 " (%s), dispclk cntl 0x%08" B_PRIx32
 		"\n", dmcub, dcn21_all_ones(dmcub) ? "does not answer"
 			: (dmcub & DCN21_DMCUB_ENABLE) != 0 ? "running" : "off",
-		Read32(OUT, DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL)));
+		seg2Answers ? Read32(OUT, DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL))
+			: 0xffffffff);
 
 	for (uint32 i = 0; i < DCN21_OTG_COUNT; i++) {
 		uint32 otg = i * DCN21_OTG_STRIDE;
@@ -308,7 +312,9 @@ dcn21_log_pipes()
 				- ((hBlank >> 16) & DCN21_OTG_FIELD15_MASK),
 			(vBlank & DCN21_OTG_FIELD15_MASK)
 				- ((vBlank >> 16) & DCN21_OTG_FIELD15_MASK),
-			Read32(OUT, DCN21_SEG1_BYTES(DCN21_OTG_PIXEL_RATE_CNTL + i * 4)),
+			seg2Answers
+				? Read32(OUT, DCN21_SEG1_BYTES(DCN21_OTG_PIXEL_RATE_CNTL + i * 4))
+				: 0xffffffff,
 			dcn21_read(DCN21_OTG_STATUS_FRAME_COUNT + otg)
 				& DCN21_OTG_FRAME_COUNT_MASK);
 		HEADLOG("hubp%" B_PRIu32 " cntl 0x%08" B_PRIx32 " surface 0x%08" B_PRIx32
@@ -392,6 +398,7 @@ dcn21_check_access(char* why, size_t whySize)
 }
 
 
+status_t dcn21_probe_path(const char* name);
 status_t dcn21_head_start(const dcn_connector_state* state,
 	const edid1_info* edid);
 
@@ -401,5 +408,6 @@ const dcn_ops gDcn21Ops = {
 	dcn21_probe_connector,
 	dcn21_log_pipes,
 	dcn21_check_access,
+	dcn21_probe_path,
 	dcn21_head_start,
 };

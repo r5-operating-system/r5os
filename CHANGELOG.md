@@ -8,6 +8,20 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-28 - Display: stick 3 froze; risky register paths only one per boot, behind the crash marker
+
+- Problem: stick 3 (`9ea2d26517`) froze hard during boot and left no syslog. Its kernel probe ran new paths with no crash marker (the kernel has none). Most likely cause:
+  - **My mistake:** the "direct, DMU segment 0x12/0xC0 + DC_PINSTRAPS" reads were no display registers. They lie in GFX register space (dwords `0x2892`, `0x2940`), which can hang the machine while GFX is power-gated before the driver's GPU start; Linux sends `DisableGfxOff` first.
+  - **Second suspect:** `PCIE_INDEX2` with an MMIO offset as SMN address.
+  - **Lowest risk:** the `MM_INDEX` VRAM read for the discovery table, which Linux does at init on Renoir.
+  - Not proven: there is no log.
+- Change:
+  - `dcn21_early.cpp` is back to stick 2's direct segment-2 reads (known safe) plus a timing line.
+  - The paths moved to the accelerant (`dcn21_paths.cpp`): `discovery`, `mm_index`, `pcie_index2`. Each runs only when `dcn_probe_path <name>` names it, at most one per boot, after a log line and with the crash marker armed (`fsync`) under its name. A hang is named by the next start and not repeated with the same settings.
+  - The segment-0/1 reads are removed. Segment-1 DCCG registers are read only once segment 2 answers.
+  - `boot-next dcnpath` runs discovery, then mm_index, then pcie_index2, one per boot.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0` (with the review fixes of the entry below); one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs); `boot-next dcnpath` host test: discovery, mm_index, pcie_index2, then the settings file removed. Not on the 5625U.
+
 ## 2026-11-28 - Display: review fixes (DCCG register segment, all-ones checks, full teardown, step 4 frames)
 
 - Problem: Gemini's review of PR 4712 at `fb2ccad8dc` (`generated/HDMI-PR4712-REVIEW-GEMINI.md`). Each finding was checked against Linux v6.12 here.
@@ -29,7 +43,7 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
   - `AS_GET_MONITOR_INFO` with an unknown id still answers for the main screen, as Haiku does, so one screen behaves as before.
   - The stick 3 probe (`dcn21_early.cpp`) is not changed: that stick is already built.
 - On the all-ones reads, the review's hypothesis is that Linux's SMU and NBIO init (`smu_hw_init`, `PPSMC_MSG_DisableGfxOff`) opens the display before `read_dce_straps()`. The stick 3 probe's indirect paths test the register path first. If every path stays all ones, the power state is the next round.
-- Tested: see the result line below. Not on the 5625U.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0` (with the review fixes of the entry below); one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs); `boot-next dcnpath` host test: discovery, mm_index, pcie_index2, then the settings file removed. Not on the 5625U.
 
 ## 2026-11-28 - Display: find the path to the display registers (stick 2 result, probe for stick 3)
 

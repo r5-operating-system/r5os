@@ -228,6 +228,15 @@ The first 5625U stick of this PR (commit `2b017df33a`, syslog in `R5OS-hdmi/gene
   - `MM_INDEX`/`MM_DATA` through the I/O BAR 4.
 
   It also logs `RCC_CONFIG_MEMSIZE` and `IP_DISCOVERY_VERSION`. The only writes are to the bus interface's index registers, as Linux does for each indirect read; each is put back. Nothing in DCN is written, and the probe logs the time it takes.
+- **Stick 3 (`9ea2d26517`, 28 Nov) froze hard during boot and left no syslog.** Stick 2, with the direct segment-2 reads only, booted fine, so the new kernel paths are the cause. The kernel has no crash marker, so nothing kept the next boot from repeating it. Most likely culprit, in the order the probe ran:
+  1. **"Direct, DMU segment 0x12 / 0xC0 + DC_PINSTRAPS".** These were never display registers. Those dwords (`0x2892`, `0x2940`) lie in GFX register space (`GC_BASE` segment 0 is `0x2000`). Before R5's GPU start, GFX may be power-gated (GFXOFF), and touching GC registers then can hang the machine; Linux sends `DisableGfxOff` before it touches GC (`smu_hw_init`). This mistake is mine: a segment base only means something with the registers of that segment.
+  2. **`PCIE_INDEX2` with `0x17500`.** That is an MMIO offset used as an SMN address, and need not be a valid SMN target.
+  3. **`MM_INDEX` into VRAM for the discovery table.** Lowest risk: Linux reads the table this way at init on Renoir (`amdgpu_discovery_read_binary_from_mem`, `amdgpu_device_mm_access`). `RCC_CONFIG_MEMSIZE` gives the carve-out size on an APU, and Linux reads the table at its end; if it read 0, Linux would read the table from system memory instead (ACPI TMR).
+- **Made safe by design (28 Nov):**
+  - The kernel probe is back to the direct segment-2 reads only (stick 2's version, known safe), plus a timing line.
+  - The other paths are in the accelerant (`dcn21_paths.cpp`): `discovery`, `mm_index` and `pcie_index2`, each behind `dcn_probe_path <name>`, off by default, at most one per boot (`boot-next dcnpath`).
+  - Before the access the accelerant logs the path and arms the crash marker with its name (`fsync`), so a path that hangs is named by the next start and not run again with the same settings.
+  - The segment-0/1 reads are gone. The DCCG registers in segment 1 are read only once segment 2 answers.
 - **A mistake found in review (28 Nov).** The DCCG registers `DENTIST_DISPCLK_CNTL`, `OTGn_PIXEL_RATE_CNTL` and `PHYPLLA_PIXCLK_RESYNC_CNTL` have `BASE_IDX 1` (segment `0xC0`), not 2. Sticks 1 and 2 read them at the wrong address; nothing wrote them, because the gate kept step 2 off. They now use segment 1 (`DCN21_SEG1_BYTES`). This does not explain the all-ones reads: `DC_PINSTRAPS`, `DMCUB_CNTL` and the OTGs really are segment 2.
 - **Isolation.** Until the registers answer, the gate keeps every DCN write away. Step 4 writes no DCN register (its second screen is memory), so the same cause cannot reach it.
 

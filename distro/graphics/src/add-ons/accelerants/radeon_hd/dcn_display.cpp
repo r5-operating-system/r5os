@@ -409,6 +409,29 @@ dcn_probe_locked()
 		return;
 
 	DCNLOG("%s\n", ops->name);
+
+	// At most one diagnostic path per boot, named in the settings. The
+	// marker names it on the disk before it runs, so a path that hangs the
+	// machine is reported by the next start and not run again.
+	char path[32] = "";
+	void* settings = load_driver_settings("radeon_hd");
+	if (settings != NULL) {
+		const char* value = get_driver_parameter(settings, "dcn_probe_path",
+			NULL, NULL);
+		if (value != NULL)
+			strlcpy(path, value, sizeof(path));
+		unload_driver_settings(settings);
+	}
+	if (path[0] != 0) {
+		char step[48];
+		snprintf(step, sizeof(step), "path-%s", path);
+		DCNLOG("dcn_probe_path %s: arming the marker, then the access\n",
+			path);
+		if (!dcn_marker_arm(step))
+			return;
+		ops->probe_path(path);
+		dcn_marker_clear();
+	}
 	if (!dcn_marker_arm("pipes"))
 		return;
 	ops->log_pipes();

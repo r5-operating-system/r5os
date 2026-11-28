@@ -32,6 +32,7 @@ FILES = (
     "src/add-ons/accelerants/radeon_hd/dcn_display.h",
     "src/add-ons/accelerants/radeon_hd/dcn21_head.cpp",
     "src/add-ons/accelerants/radeon_hd/dcn21_hotplug.cpp",
+    "src/add-ons/accelerants/radeon_hd/dcn21_paths.cpp",
     "src/add-ons/accelerants/radeon_hd/dcn21_regs.h",
     "src/add-ons/accelerants/radeon_hd/gfx9_compute.s",
     "src/add-ons/accelerants/radeon_hd/gfx9_compute_shader.h",
