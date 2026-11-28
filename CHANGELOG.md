@@ -8,6 +8,27 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-28 - Display: round 2 DMU reachability diagnostics (MMHUB/NBIF0, VBIOS SMU wake, DisableGfxOff) and air/OS multi-screen audit
+
+- Problem (round 1 stick, `bdcdabb138`, `generated/hdmi-logs/round-1-boots-0-3.syslog`):
+  - Boot slowdown is fixed: `dcn early` dropped from ~973 ms to 139 ms per stage, and `dcn: probe` dropped from ~9.60 s to 145 ms (~11.1 s saved per boot).
+  - `smu_status` showed the SMU answers: driver mailbox `msg66 = 0x1e` (`PPSMC_MSG_GfxDeviceDriverReset`, param `2`, resp `1`), VBIOS/display mailbox `msg67 = 0x7` (`VBIOSSMC_MSG_SetDppclkFreq`, param `720`, resp `1`), `SMUIO_GFX_MISC_CNTL = 0x5` (`PWR_GFXOFF_STATUS = 2` = `ON`, not in GFXOFF), `PWR_MISC_CNTL_STATUS = 0x0`.
+  - `clk_status` showed `CLK1` answers and display clocks are running: `PLL_REQ = 0x4b`, `DISPCLK = 720 MHz`, `DPPCLK = 720 MHz`, `DPREFCLK = 598 MHz`, `DCFCLK = 399 MHz` (`bypass 0x3`, `ds_cntl = 4`, `allow_ds = 1`).
+  - Both DMU segments still timed out in ~139.3 ms: segment 1 (`DENTIST_DISPCLK_CNTL` byte `0x490`) and segment 2 (`DC_PINSTRAPS` byte `0x17500`) returned `0xffffffff` while NBIO, GC, MP0, MP1, SMUIO, and CLK1 all answered on the same BAR5.
+  - Checked Linux `v6.12` (`amdgpu_device.c`, `gmc_v9_0.c`, `mmhub_v1_0.c`, `psp_v12_0.c`, `amdgpu_dm.c`, `rn_clk_mgr_vbios_smu.c`, `smu_v12_0.c`): `dm_set_clockgating_state()` is a no-op and `gmc_v9_0_hw_init()` already accesses `DCE` (`mmVGA_HDP_CONTROL`, DMU seg 1) before PSP/SMU/DM init. Remaining candidates: whether `MMHUB` (the fabric behind which DMU sits) answers on BAR5, and whether sending Linux's `VBIOSSMC_MSG_SetDisplayCount(1)` (mission mode) or `PPSMC_MSG_DisableGfxOff` on the already-working SMU mailboxes opens DMU host access.
+- Change:
+  - `dcn21_paths.cpp`: added three targeted diagnostic paths behind `dcn_probe_path` (off by default, one per boot, protected by the fsynced crash marker, bounded waits):
+    - `bus_probe` (read-only): `NBIF0` (`mmRCC_DEV0_EPF0_STRAP0` `0x0d2f`, `mmBIF_FB_EN` `0x0e1f`; `nbio_7_0_offset.h`) and `MMHUB` (`mmMC_VM_FB_LOCATION_BASE/TOP` `0x1a82c/0x1a82d`; `mmhub_1_0_offset.h`).
+    - `vbios_smu_wake`: sends `VBIOSSMC_MSG_GetSmuVersion` (`0x2`) and `VBIOSSMC_MSG_SetDisplayCount` (`0xc`, param `1`, `rn_clk_mgr_vbios_smu.c:134, 233-246`) on the VBIOS/display mailbox (`C2PMSG_67/83/91`), then re-reads `DC_PINSTRAPS`.
+    - `smu_disable_gfxoff`: sends `PPSMC_MSG_GetSmuVersion` (`0x2`) and `PPSMC_MSG_DisableGfxOff` (`0x8`, `smu_v12_0.c:158-180`) on the driver mailbox (`C2PMSG_66/82/90`), polls `SMUIO_GFX_MISC_CNTL` for `PWR_GFXOFF_STATUS == 2` (up to 500 ms), then re-reads `DC_PINSTRAPS`.
+  - `boot-next`: added `boot-next dcndiag2` (3 boots: `bus_probe` → `vbios_smu_wake` → `smu_disable_gfxoff`, saving `~/dcndiag2/boot<n>.txt`, removing settings file after boot 3).
+  - Audited air/OS (`github.com/airos-works/haiku`, commit `3bb2bbbffd`, `DisplayLayout.{h,cpp}` and `Screen` preferences `DisplayArrangementView`/`DisplayLayoutState`): all inspected files are MIT (`Copyright 2026, Haiku, Inc.`); documented comparison and adoption plan for Step 4 in `docs/DISPLAY-DCN.md` (not ported yet while DMU bring-up is in progress).
+- Tested:
+  - `scripts/build-locked.sh` in WSL from `R5OS-hdmi-gemini`: `jam_exit=0`, `mesa_exit=0`, `ok egl vendor`.
+  - `boot-next dcndiag2` host test (`BOOT_NEXT_YES=0`): `bus_probe` → `vbios_smu_wake` → `smu_disable_gfxoff` → settings file removed, `boot1.txt`..`boot3.txt` saved.
+  - QEMU/KVM (`-cpu host -smp 2`, private copy of `r5-os.image`): booted cleanly to 1280×800 rendered screen (no AMD GPU in QEMU, so DCN skips cleanly).
+- Limits: not run on the 5625U yet; `bus_probe`, `vbios_smu_wake`, and `smu_disable_gfxoff` results await the round-2 stick.
+
 ## 2026-11-28 - Display: stop DCN timeout slowdown at boot; read-only SMU, clock and DCCG diagnostics (round 1)
 
 - Problem (stick 4, `b77736dd0e`, `generated/hdmi-logs/stick-boot-57.syslog`):

@@ -41,9 +41,23 @@
  * - "dccg_seg1": read-only read of one real DMU segment-1 register,
  *   mmDENTIST_DISPCLK_CNTL ((0x00c0 + 0x0064) * 4 = 0x490, dcn_2_1_0_offset.h
  *   BASE_IDX 1), to tell whether DMU segment 1 answers while segment 2 does not.
+ * - "bus_probe": read-only reads of NBIF0 (mmRCC_DEV0_EPF0_STRAP0 0x0d2f,
+ *   mmBIF_FB_EN 0x0e1f; nbio_7_0_offset.h BASE_IDX 2, NBIF0_BASE seg 2
+ *   0x0d20) and MMHUB (mmMC_VM_FB_LOCATION_BASE/TOP 0x1a82c/0x1a82d;
+ *   mmhub_1_0_offset.h BASE_IDX 0, MMHUB_BASE seg 0 0x1a000), to see whether
+ *   MMHUB (the fabric behind which DMU sits) answers on BAR5.
+ * - "vbios_smu_wake": sends VBIOSSMC_MSG_GetSmuVersion (0x2) and
+ *   VBIOSSMC_MSG_SetDisplayCount (0xc, param 1 = DCN_PWR_STATE_MISSION_MODE)
+ *   on the already-proven VBIOS/display SMU mailbox (MP1 C2PMSG_67/83/91,
+ *   rn_clk_mgr_vbios_smu.c:134, 233-246), then re-reads DC_PINSTRAPS.
+ * - "smu_disable_gfxoff": sends PPSMC_MSG_GetSmuVersion (0x2) and
+ *   PPSMC_MSG_DisableGfxOff (0x8) on the already-proven driver SMU mailbox
+ *   (MP1 C2PMSG_66/82/90, smu_v12_0.c:158-180), polls SMUIO_GFX_MISC_CNTL
+ *   for PWR_GFXOFF_STATUS == 2 (up to 500 ms), then re-reads DC_PINSTRAPS.
  * Only the bus interface's index registers are written in discovery/mm_index/
- * pcie_index2; each is put back. smu_status, clk_status and dccg_seg1 perform
- * zero writes.
+ * pcie_index2; each is put back. smu_status, clk_status, dccg_seg1 and
+ * bus_probe perform zero writes. vbios_smu_wake and smu_disable_gfxoff write
+ * only to the SMU mailboxes outside DMU.
  */
 
 
@@ -329,6 +343,155 @@ path_dccg_seg1()
 }
 
 
+// Read-only NBIO + MMHUB probe outside DMU (Linux v6.12, MIT, AMD):
+// - renoir_ip_offset.h: NBIF0_BASE seg 2 = 0x0d20, MMHUB_BASE seg 0 = 0x1a000.
+// - nbio_7_0_offset.h: mmRCC_DEV0_EPF0_STRAP0 = 0x000f (BASE_IDX 2),
+//   mmBIF_FB_EN = 0x00ff (BASE_IDX 2).
+// - mmhub_1_0_offset.h: mmMC_VM_FB_LOCATION_BASE = 0x082c (BASE_IDX 0),
+//   mmMC_VM_FB_LOCATION_TOP = 0x082d (BASE_IDX 0).
+static status_t
+path_bus_probe()
+{
+	static const uint32 kNbif0Seg2 = 0x00000d20u;
+	static const uint32 kMmhubSeg0 = 0x0001a000u;
+
+	uint32 strap0 = rd(kNbif0Seg2 + 0x000fu);
+	uint32 bifFbEn = rd(kNbif0Seg2 + 0x00ffu);
+	PATHLOG("bus_probe: NBIF0 EPF0_STRAP0 0x%08" B_PRIx32 " BIF_FB_EN 0x%08"
+		B_PRIx32 "\n", strap0, bifFbEn);
+
+	uint32 fbBase = rd(kMmhubSeg0 + 0x082cu);
+	if (fbBase == 0xffffffffu) {
+		PATHLOG("bus_probe: MMHUB FB_LOCATION_BASE 0xffffffff (MMHUB does not"
+			" answer)\n");
+		return B_OK;
+	}
+	uint32 fbTop = rd(kMmhubSeg0 + 0x082du);
+	PATHLOG("bus_probe: MMHUB FB_LOCATION_BASE 0x%08" B_PRIx32 " TOP 0x%08"
+		B_PRIx32 "\n", fbBase, fbTop);
+	return B_OK;
+}
+
+
+// Bounded SMU mailbox helper for MP1 seg 0 (Linux v6.12, MIT, AMD:
+// rn_clk_mgr_vbios_smu.c:80-132, smu_cmn.c:109-123, 407-468).
+// Wait limit: 200000 * 10 us = 2 s, matching rn_clk_mgr_vbios_smu.c:105.
+static uint32
+smu_mailbox_poll(uint32 respDword)
+{
+	uint32 val = 0;
+	for (uint32 i = 0; i < 200000; i++) {
+		val = rd(respDword);
+		if (val != 0)
+			break;
+		snooze(10);
+	}
+	return val;
+}
+
+
+static uint32
+smu_mailbox_send(uint32 msgDword, uint32 paramDword, uint32 respDword,
+	uint32 msgId, uint32 param, uint32* outParam)
+{
+	uint32 before = smu_mailbox_poll(respDword);
+	if (before == 0 || before == 0xffffffffu)
+		return before;
+	wr(respDword, 0);
+	wr(paramDword, param);
+	wr(msgDword, msgId);
+	uint32 after = smu_mailbox_poll(respDword);
+	if (outParam != NULL)
+		*outParam = rd(paramDword);
+	return after;
+}
+
+
+// Send VBIOSSMC_MSG_GetSmuVersion (0x2) and VBIOSSMC_MSG_SetDisplayCount (0xc,
+// param 1 = DCN_PWR_STATE_MISSION_MODE) on the VBIOS/display SMU mailbox
+// (rn_clk_mgr_vbios_smu.c:134, 233-246), then re-read DC_PINSTRAPS.
+static status_t
+path_vbios_smu_wake()
+{
+	static const uint32 kMp1Seg0 = 0x16000u;
+	static const uint32 kMsg67 = kMp1Seg0 + 0x283u;
+	static const uint32 kParam83 = kMp1Seg0 + 0x293u;
+	static const uint32 kResp91 = kMp1Seg0 + 0x29bu;
+
+	uint32 smuVer = 0;
+	uint32 resp = smu_mailbox_send(kMsg67, kParam83, kResp91, 0x2u, 0u,
+		&smuVer);
+	PATHLOG("vbios_smu_wake: GetSmuVersion resp 0x%08" B_PRIx32 " ver 0x%08"
+		B_PRIx32 "\n", resp, smuVer);
+	if (resp != 1u)
+		return B_IO_ERROR;
+
+	uint32 outParam = 0;
+	resp = smu_mailbox_send(kMsg67, kParam83, kResp91, 0xcu, 1u, &outParam);
+	PATHLOG("vbios_smu_wake: SetDisplayCount(1) resp 0x%08" B_PRIx32
+		" out 0x%08" B_PRIx32 "\n", resp, outParam);
+	snooze(1000);
+
+	uint32 straps = Read32(OUT, DCN21_BYTES(DCN21_DC_PINSTRAPS));
+	if (straps == 0xffffffffu) {
+		PATHLOG("vbios_smu_wake: after wake DC_PINSTRAPS 0xffffffff\n");
+		return B_OK;
+	}
+	uint32 dispclk = Read32(OUT, DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL));
+	PATHLOG("vbios_smu_wake: after wake DC_PINSTRAPS 0x%08" B_PRIx32
+		" DENTIST_DISPCLK_CNTL 0x%08" B_PRIx32 "\n", straps, dispclk);
+	return B_OK;
+}
+
+
+// Send PPSMC_MSG_GetSmuVersion (0x2) and PPSMC_MSG_DisableGfxOff (0x8) on the
+// driver SMU mailbox (smu_v12_0.c:158-180), poll SMUIO_GFX_MISC_CNTL for
+// PWR_GFXOFF_STATUS == 2 (up to 500 ms), then re-read DC_PINSTRAPS.
+static status_t
+path_smu_disable_gfxoff()
+{
+	static const uint32 kMp1Seg0 = 0x16000u;
+	static const uint32 kSmuioSeg0 = 0x16800u;
+	static const uint32 kMsg66 = kMp1Seg0 + 0x282u;
+	static const uint32 kParam82 = kMp1Seg0 + 0x292u;
+	static const uint32 kResp90 = kMp1Seg0 + 0x29au;
+
+	uint32 smuVer = 0;
+	uint32 resp = smu_mailbox_send(kMsg66, kParam82, kResp90, 0x2u, 0u,
+		&smuVer);
+	PATHLOG("smu_disable_gfxoff: GetSmuVersion resp 0x%08" B_PRIx32
+		" ver 0x%08" B_PRIx32 "\n", resp, smuVer);
+	if (resp != 1u)
+		return B_IO_ERROR;
+
+	uint32 outParam = 0;
+	resp = smu_mailbox_send(kMsg66, kParam82, kResp90, 0x8u, 0u, &outParam);
+	uint32 gfxMisc = 0;
+	uint32 gfxoff = 0;
+	for (uint32 ms = 0; ms < 500; ms++) {
+		gfxMisc = rd(kSmuioSeg0 + 0x00c8u);
+		gfxoff = (gfxMisc >> 1) & 3u;
+		if (gfxoff == 2u)
+			break;
+		snooze(1000);
+	}
+	PATHLOG("smu_disable_gfxoff: DisableGfxOff resp 0x%08" B_PRIx32
+		" SMUIO_GFX_MISC_CNTL 0x%08" B_PRIx32 " (gfxoff %" B_PRIu32 ")\n",
+		resp, gfxMisc, gfxoff);
+
+	uint32 straps = Read32(OUT, DCN21_BYTES(DCN21_DC_PINSTRAPS));
+	if (straps == 0xffffffffu) {
+		PATHLOG("smu_disable_gfxoff: after DisableGfxOff DC_PINSTRAPS"
+			" 0xffffffff\n");
+		return B_OK;
+	}
+	uint32 dispclk = Read32(OUT, DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL));
+	PATHLOG("smu_disable_gfxoff: after DisableGfxOff DC_PINSTRAPS 0x%08"
+		B_PRIx32 " DENTIST_DISPCLK_CNTL 0x%08" B_PRIx32 "\n", straps, dispclk);
+	return B_OK;
+}
+
+
 status_t
 dcn21_probe_path(const char* name)
 {
@@ -346,9 +509,16 @@ dcn21_probe_path(const char* name)
 		status = path_clk_status();
 	else if (strcmp(name, "dccg_seg1") == 0)
 		status = path_dccg_seg1();
+	else if (strcmp(name, "bus_probe") == 0)
+		status = path_bus_probe();
+	else if (strcmp(name, "vbios_smu_wake") == 0)
+		status = path_vbios_smu_wake();
+	else if (strcmp(name, "smu_disable_gfxoff") == 0)
+		status = path_smu_disable_gfxoff();
 	else {
 		PATHLOG("unknown path \"%s\" (discovery, mm_index, pcie_index2,"
-			" smu_status, clk_status, dccg_seg1)\n", name);
+			" smu_status, clk_status, dccg_seg1, bus_probe, vbios_smu_wake,"
+			" smu_disable_gfxoff)\n", name);
 		return B_BAD_VALUE;
 	}
 	PATHLOG("%s: done in %" B_PRId64 " us\n", name, system_time() - start);

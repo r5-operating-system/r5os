@@ -292,6 +292,87 @@ if [ "$1" = dcndiag ] || { [ -z "$1" ] && [ -f "$file" ] \
 	exit 0
 fi
 
+# Display round 2 diagnostics (docs/DISPLAY-DCN.md, round 2):
+# "boot-next dcndiag2" starts it, and a radeon_hd settings file with a
+# dcn_diag2_boot line continues it. One path per boot, behind the crash
+# marker: boot 1 bus_probe (read-only NBIF0 + MMHUB), boot 2 vbios_smu_wake
+# (VBIOS mailbox GetSmuVersion + SetDisplayCount(1) + re-read DC_PINSTRAPS),
+# boot 3 smu_disable_gfxoff (driver mailbox GetSmuVersion + DisableGfxOff +
+# re-read DC_PINSTRAPS); then the settings file is removed. Saved in
+# ~/dcndiag2/boot<n>.txt.
+if [ "$1" = dcndiag2 ] || { [ -z "$1" ] && [ -f "$file" ] \
+		&& grep -q '^dcn_diag2_boot' "$file"; }; then
+	d2=$home/dcndiag2
+	mkdir -p "$d2" "$(dirname "$file")"
+	if [ "$1" = dcndiag2 ]; then
+		cur=0
+		next=1
+	else
+		cur=$(sed -n 's/^dcn_diag2_boot[[:space:]]*\([123]\).*/\1/p' \
+			"$file" | head -n 1)
+		case $cur in
+		1) next=2 ;;
+		2) next=3 ;;
+		3) next=done ;;
+		*)
+			echo "FAIL dcndiag2: unknown boot '$cur' in $file"
+			exit 1
+			;;
+		esac
+	fi
+	if [ "$cur" != 0 ]; then
+		grep -E 'radeon_hd: dcn' "${R5_SYSLOG:-/var/log/syslog}" \
+			> "$d2/boot$cur.txt" 2>/dev/null
+		echo "boot-next: saved $(wc -l < "$d2/boot$cur.txt") lines in" \
+			"$d2/boot$cur.txt"
+	fi
+	rm -f "$file"
+	case $next in
+	1) want=bus_probe ;;
+	2) want=vbios_smu_wake ;;
+	3) want=smu_disable_gfxoff ;;
+	done) want= ;;
+	esac
+	if [ -n "$want" ]; then
+		{
+			echo "dcn_probe_path $want"
+			echo "dcn_diag2_boot $next"
+		} > "$file"
+		# Read the file back: a typo here is a lost boot.
+		if ! grep -q "^dcn_probe_path $want\$" "$file"; then
+			echo "FAIL dcndiag2: $file does not say dcn_probe_path $want"
+			exit 1
+		fi
+	elif [ -f "$file" ]; then
+		echo "FAIL dcndiag2: $file is still there"
+		exit 1
+	fi
+	echo "$next" > "$d2/next"
+	if [ -n "$want" ]; then
+		echo "boot-next: next boot is dcndiag2 boot $next ($want)"
+	else
+		echo "boot-next: dcndiag2 done, settings file removed"
+	fi
+	echo "boot-next: settings file $file"
+	if [ "${BOOT_NEXT_YES:-1}" = 0 ] || [ "$next" = done ]; then
+		echo PASS
+		exit 0
+	fi
+	printf 'boot-next: restart? [y] '
+	read ans
+	if [ "$ans" != y ]; then
+		echo "FAIL not restarted (the settings are written)"
+		exit 1
+	fi
+	echo PASS
+	sync
+	if ! shutdown -r; then
+		echo "FAIL shutdown -r did not start"
+		exit 1
+	fi
+	exit 0
+fi
+
 # HDMI display stick (docs/DISPLAY-DCN.md, PR 4712): "boot-next hdmi"
 # starts it, and a radeon_hd settings file with a dcn_hdmi_boot line
 # continues it. Before each step the dcn lines of the boot that ran are saved
