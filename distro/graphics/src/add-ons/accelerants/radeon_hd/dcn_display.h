@@ -49,6 +49,10 @@ struct dcn_ops {
 					edid1_info* edid);
 	// Step 2a: log what the firmware left. Reads only.
 	void		(*log_pipes)();
+	// Reads only. B_OK when the display registers answer with values the
+	// hardware can have; otherwise why, and nothing may write a DCN
+	// register this boot.
+	status_t	(*check_access)(char* why, size_t whySize);
 	// Step 2: light the connector on a free pipe (opt-in).
 	status_t	(*head_start)(const dcn_connector_state* state,
 					const edid1_info* edid);

@@ -161,7 +161,7 @@ if [ "$1" = hdmi ] || { [ -z "$1" ] && [ -f "$file" ] \
 		esac
 	fi
 	if [ "$cur" != 0 ]; then
-		grep -E 'dcn hdmi|dcn head' "${R5_SYSLOG:-/var/log/syslog}" \
+		grep -E 'radeon_hd: dcn' "${R5_SYSLOG:-/var/log/syslog}" \
 			> "$hd/boot$cur.txt" 2>/dev/null
 		echo "boot-next: saved $(wc -l < "$hd/boot$cur.txt") lines in" \
 			"$hd/boot$cur.txt"

@@ -32,6 +32,8 @@
 #define DCN21_DDC_CLK					(1u << 0)
 #define DCN21_DDC_DATA					(1u << 8)
 #define DCN21_DDC_AUX_PAD_MODE			(1u << 16)
+// DC_PINSTRAPS: the first DCN register Linux reads (read_dce_straps).
+#define DCN21_DC_PINSTRAPS			0x2880u
 #define DCN21_GPIO_HPD_A				0x28f5u
 #define DCN21_GPIO_HPD_Y				0x28f7u
 #define DCN21_HPD0_INT_STATUS			0x1f14u

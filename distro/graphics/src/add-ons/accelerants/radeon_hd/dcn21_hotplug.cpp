@@ -27,6 +27,7 @@
 
 #include "dcn_display.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include <Debug.h>
@@ -79,6 +80,15 @@ dcn21_write(uint32 offset, uint32 value)
 }
 
 
+// 0xffffffff is what a register that does not answer reads. None of the
+// registers read here can hold it: each has reserved bits.
+static inline bool
+dcn21_all_ones(uint32 value)
+{
+	return value == 0xffffffff;
+}
+
+
 struct dcn21_ddc_bus {
 	uint32	mask;
 	uint32	a;
@@ -128,6 +138,12 @@ dcn21_ddc_read_edid(uint32 padMask, edid1_info* edid)
 	uint32 savedMask = dcn21_read(bus.mask);
 	uint32 savedA = dcn21_read(bus.a);
 	uint32 savedEn = dcn21_read(bus.en);
+	// A pad that reads all ones does not answer: never write to it.
+	if (dcn21_all_ones(savedMask) || dcn21_all_ones(savedA)
+		|| dcn21_all_ones(savedEn) || dcn21_all_ones(dcn21_read(bus.y))) {
+		HDMILOG("ddc pad registers read 0xffffffff, EDID not read\n");
+		return false;
+	}
 
 	// Inputs first, A low, then hand both pins to software in I2C pad mode,
 	// the order gpio_lock_i2c() uses on DCE.
@@ -195,18 +211,19 @@ dcn21_probe_connector(uint32 id, bool hasI2c, uint8 i2cId, bool hasHpd,
 		hasHpd ? hpdPin : 0xff, state->hpd >= 0 ? state->hpd + 1 : 0, hpdReg,
 		(unsigned)hpdShift);
 
-	// Hotplug: pure reads.
+	// Hotplug: pure reads. A register that reads all ones says nothing.
 	bool sense = false;
 	bool pin = false;
 	if (state->hpd >= 0) {
 		uint32 y = dcn21_read(DCN21_GPIO_HPD_Y);
-		pin = (y & kHpdMasks[state->hpd]) != 0;
+		pin = !dcn21_all_ones(y) && (y & kHpdMasks[state->hpd]) != 0;
 		if ((uint32)state->hpd < DCN21_HPD_BLOCKS) {
 			uint32 block = (uint32)state->hpd * DCN21_HPD_STRIDE;
 			uint32 control = dcn21_read(DCN21_HPD0_CONTROL + block);
 			uint32 status = dcn21_read(DCN21_HPD0_INT_STATUS + block);
-			bool enabled = (control & DCN21_HPD_EN) != 0;
-			if (enabled) {
+			bool enabled = !dcn21_all_ones(control)
+				&& (control & DCN21_HPD_EN) != 0;
+			if (enabled && !dcn21_all_ones(status)) {
 				sense = (status & (DCN21_HPD_SENSE | DCN21_HPD_SENSE_DELAYED))
 					!= 0;
 			}
@@ -262,7 +279,8 @@ dcn21_log_pipes()
 {
 	uint32 dmcub = dcn21_read(DCN21_DMCUB_CNTL);
 	HEADLOG("dmcub cntl 0x%08" B_PRIx32 " (%s), dispclk cntl 0x%08" B_PRIx32
-		"\n", dmcub, (dmcub & DCN21_DMCUB_ENABLE) != 0 ? "running" : "off",
+		"\n", dmcub, dcn21_all_ones(dmcub) ? "does not answer"
+			: (dmcub & DCN21_DMCUB_ENABLE) != 0 ? "running" : "off",
 		dcn21_read(DCN21_DENTIST_DISPCLK_CNTL));
 
 	for (uint32 i = 0; i < DCN21_OTG_COUNT; i++) {
@@ -317,6 +335,57 @@ dcn21_log_pipes()
 }
 
 
+// The access gate. Reads only.
+// - DC_PINSTRAPS is the first DCN register Linux reads
+//   (resource/dcn21/dcn21_resource.c read_dce_straps()); all ones is not a
+//   strap value.
+// - The firmware drives the panel, so one OTG must be on, with a horizontal
+//   total a real mode has.
+// - For comparison, a register outside DCN the kernel reads in the same
+//   boot: the SMU mailbox response (MP1 segment 0 0x16000 + 0x29a,
+//   r5_smu12.cpp), so the log shows whether the accelerant's mapping answers.
+static status_t
+dcn21_check_access(char* why, size_t whySize)
+{
+	static const uint32 kSmuResponseByte = (0x16000u + 0x29au) * 4u;
+	uint32 smu = Read32(OUT, kSmuResponseByte);
+	uint32 straps = dcn21_read(DCN21_DC_PINSTRAPS);
+
+	int32 panelOtg = -1;
+	uint32 panelTotal = 0;
+	for (uint32 i = 0; i < DCN21_OTG_COUNT; i++) {
+		uint32 otg = i * DCN21_OTG_STRIDE;
+		uint32 control = dcn21_read(DCN21_OTG_CONTROL + otg);
+		uint32 hTotal = dcn21_read(DCN21_OTG_H_TOTAL + otg);
+		if (dcn21_all_ones(control) || dcn21_all_ones(hTotal)
+			|| (control & DCN21_OTG_MASTER_EN) == 0)
+			continue;
+		uint32 total = (hTotal & DCN21_OTG_FIELD15_MASK) + 1;
+		if (total >= 320 && total <= 16384) {
+			panelOtg = (int32)i;
+			panelTotal = total;
+			break;
+		}
+	}
+
+	if (dcn21_all_ones(straps)) {
+		snprintf(why, whySize, "DC_PINSTRAPS 0xffffffff (smu response 0x%08"
+			B_PRIx32 "%s)", smu, dcn21_all_ones(smu)
+				? ", the mapping does not answer either" : "");
+		return B_ERROR;
+	}
+	if (panelOtg < 0) {
+		snprintf(why, whySize, "no OTG is on with a real mode (pinstraps 0x%08"
+			B_PRIx32 ", smu response 0x%08" B_PRIx32 ")", straps, smu);
+		return B_ERROR;
+	}
+	snprintf(why, whySize, "pinstraps 0x%08" B_PRIx32 ", panel on otg%" B_PRId32
+		" total %" B_PRIu32 ", smu response 0x%08" B_PRIx32, straps, panelOtg,
+		panelTotal, smu);
+	return B_OK;
+}
+
+
 status_t dcn21_head_start(const dcn_connector_state* state,
 	const edid1_info* edid);
 
@@ -325,5 +394,6 @@ const dcn_ops gDcn21Ops = {
 	"DCN 2.1",
 	dcn21_probe_connector,
 	dcn21_log_pipes,
+	dcn21_check_access,
 	dcn21_head_start,
 };

@@ -8,6 +8,13 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-28 - Display: no DCN write before the display registers answer (stick 1 froze)
+
+- Problem (first 5625U stick of PR 4712, commit `2b017df33a`, HDMI monitor attached): every DCN register the accelerant read was `0xffffffff`. The probe took that as data (`dmcub (running)`, `sense 1 pin 1`) and bit-banged the DDC pad, which writes DCN GPIO registers; the machine froze. The crash marker kept the next two boots alive; after `boot-next hdmi` changed the settings it froze once more, as designed. Mistake: the code wrote to registers it had not checked.
+- Checked, not the cause: the addresses equal Linux's (`DMU_BASE` seg 2 `0x34C0`, `dcn_2_1_0_offset.h`, (base + offset) × 4); the accelerant uses the kernel's own BAR5 mapping (512 KiB, all offsets inside, the mapping the GFX9 ring uses); Linux reads these directly; Linux also sends the mode-2 reset at init on Renoir (`soc15_need_reset_on_init`). Why DCN answers all ones is open.
+- Change: a read-only gate (`check_access`) before any DCN write: `DC_PINSTRAPS` (the first register Linux reads, `read_dce_straps`) must not be all ones, and one OTG must be on with a real horizontal total; otherwise `radeon_hd: dcn: registers do not answer: ...` and DCN is off for the boot. All-ones values no longer count as HPD high or DMCUB running; the DDC bit-bang refuses a pad that reads all ones. The gate logs the SMU mailbox response read through the same mapping. New `dcn21_early.cpp` in the kernel logs `radeon_hd: dcn early: before gpu start / after gpu start` (DC_PINSTRAPS, DMCUB, OTG 0 to 3; reads only) so the next boot shows when DCN stops answering. Step 4 writes no DCN register and is unchanged.
+- Tested: `scripts/build-locked.sh` `jam_exit=0`, `mesa_exit=0`; one QEMU/KVM boot reached the first-start window (no AMD GPU, so no DCN code runs); `boot-next hdmi` host test saves the new `radeon_hd: dcn` lines. Not on the 5625U: whether the gate holds and what the early probe shows needs the next stick (a fresh image: stick 1 holds the crash marker for its settings).
+
 ## 2026-11-27 - Display step 4: app_server with more than one screen (opt-in), test screen in memory
 
 - Problem: Haiku's app_server has the classes for more than one screen (ScreenManager, VirtualScreen, BScreen ids) but stops at TODOs: one interface, one drawing engine, only the main screen id, frames always at (0, 0), the pointer kept on the main screen.

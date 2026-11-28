@@ -60,6 +60,7 @@ FILES = (
     "src/add-ons/kernel/drivers/graphics/radeon_hd/driver.cpp",
     "src/add-ons/kernel/drivers/graphics/radeon_hd/device.cpp",
     "src/add-ons/kernel/drivers/graphics/radeon_hd/radeon_hd.cpp",
+    "src/add-ons/kernel/drivers/graphics/radeon_hd/dcn21_early.cpp",
     "src/add-ons/kernel/drivers/graphics/radeon_hd/gfx9_k12.cpp",
     "src/add-ons/kernel/drivers/graphics/radeon_hd/r5_gpu.cpp",
     "src/add-ons/kernel/drivers/graphics/radeon_hd/r5_passport.cpp",
