@@ -27,7 +27,23 @@
  * - "pcie_index2": DC_PINSTRAPS through PCIE_INDEX2/PCIE_DATA2
  *   (amdgpu_device_indirect_rreg, nbio_v7_0; nbio_7_0_offset.h 0xe/0xf),
  *   with the MMIO byte offset as the address, as pcie_rreg(reg * 4) gets it.
- * Only the bus interface's index registers are written; each is put back.
+ * - "smu_status": read-only SMU mailbox and SMUIO power-state registers
+ *   outside DCN (MP1_BASE seg 0 0x16000: driver mailbox C2PMSG_66/82/90 and
+ *   VBIOS/display mailbox C2PMSG_67/83/91, rn_clk_mgr_vbios_smu.c;
+ *   SMUIO_BASE seg 0 0x16800 mmSMUIO_GFX_MISC_CNTL 0xc8, smu_v12_0.c
+ *   smu_v12_0_get_gfxoff_status(); SMUIO_BASE seg 1 0x16a00
+ *   mmPWR_MISC_CNTL_STATUS 0x183, smuio_12_0_0_offset.h).
+ * - "clk_status": read-only display clock registers outside DCN (CLK_BASE
+ *   seg 1 0x16e00, clk_10_0_2_offset.h, read by rn_clk_mgr.c
+ *   get_vco_frequency_from_reg() and rn_dump_clk_registers_internal():
+ *   CLK1_CLK_PLL_REQ, CLK1_CLK0..3_CURRENT_CNT, BYPASS_CNTL, DS_CNTL,
+ *   ALLOW_DS). Stops immediately if the first read returns 0xffffffff.
+ * - "dccg_seg1": read-only read of one real DMU segment-1 register,
+ *   mmDENTIST_DISPCLK_CNTL ((0x00c0 + 0x0064) * 4 = 0x490, dcn_2_1_0_offset.h
+ *   BASE_IDX 1), to tell whether DMU segment 1 answers while segment 2 does not.
+ * Only the bus interface's index registers are written in discovery/mm_index/
+ * pcie_index2; each is put back. smu_status, clk_status and dccg_seg1 perform
+ * zero writes.
  */
 
 
@@ -212,6 +228,107 @@ path_pcie_index2()
 }
 
 
+// Read-only SMU & SMUIO status outside DCN (Linux v6.12, MIT, AMD):
+// - renoir_ip_offset.h: MP1_BASE seg 0 = 0x16000, SMUIO_BASE seg 0 = 0x16800,
+//   SMUIO_BASE seg 1 = 0x16a00.
+// - mp_12_0_0_offset.h: C2PMSG_66/82/90 (driver mailbox) = 0x282/0x292/0x29a;
+//   C2PMSG_67/83/91 (VBIOS/display mailbox, rn_clk_mgr_vbios_smu.c) =
+//   0x283/0x293/0x29b.
+// - smuio_12_0_0_offset.h & smu_v12_0.c:151: mmSMUIO_GFX_MISC_CNTL = 0xc8
+//   (BASE_IDX 0), mmPWR_MISC_CNTL_STATUS = 0x183 (BASE_IDX 1).
+static status_t
+path_smu_status()
+{
+	static const uint32 kMp1Seg0 = 0x16000u;
+	static const uint32 kSmuioSeg0 = 0x16800u;
+	static const uint32 kSmuioSeg1 = 0x16a00u;
+
+	uint32 drvMsg = rd(kMp1Seg0 + 0x282u);
+	uint32 drvParam = rd(kMp1Seg0 + 0x292u);
+	uint32 drvResp = rd(kMp1Seg0 + 0x29au);
+	PATHLOG("smu_status: driver mailbox msg66 0x%08" B_PRIx32 " param82 0x%08"
+		B_PRIx32 " resp90 0x%08" B_PRIx32 "\n", drvMsg, drvParam, drvResp);
+
+	uint32 vbiosMsg = rd(kMp1Seg0 + 0x283u);
+	uint32 vbiosParam = rd(kMp1Seg0 + 0x293u);
+	uint32 vbiosResp = rd(kMp1Seg0 + 0x29bu);
+	PATHLOG("smu_status: vbios mailbox msg67 0x%08" B_PRIx32 " param83 0x%08"
+		B_PRIx32 " resp91 0x%08" B_PRIx32 "\n", vbiosMsg, vbiosParam,
+		vbiosResp);
+
+	uint32 gfxMisc = rd(kSmuioSeg0 + 0x00c8u);
+	if (gfxMisc == 0xffffffffu) {
+		PATHLOG("smu_status: SMUIO_GFX_MISC_CNTL 0xffffffff (does not"
+			" answer)\n");
+		return B_OK;
+	}
+	uint32 gfxoff = (gfxMisc >> 1) & 3u;
+	const char* gfxoffName = gfxoff == 0 ? "GFXOFF"
+		: gfxoff == 1 ? "exiting"
+		: gfxoff == 2 ? "ON" : "entering";
+	uint32 pwrMisc = rd(kSmuioSeg1 + 0x0183u);
+	PATHLOG("smu_status: SMUIO_GFX_MISC_CNTL 0x%08" B_PRIx32 " (gfxoff %"
+		B_PRIu32 " %s) PWR_MISC_CNTL_STATUS 0x%08" B_PRIx32 "\n", gfxMisc,
+		gfxoff, gfxoffName, pwrMisc);
+	return B_OK;
+}
+
+
+// Read-only display clock status outside DCN (Linux v6.12, MIT, AMD):
+// - renoir_ip_offset.h: CLK_BASE seg 1 = 0x16e00.
+// - clk_10_0_2_offset.h & rn_clk_mgr.c (get_vco_frequency_from_reg,
+//   rn_dump_clk_registers_internal): CLK1_CLK_PLL_REQ 0x000f,
+//   CLK1_CLK0..3_CURRENT_CNT 0x008a..0x008d (dispclk, dppclk, dprefclk,
+//   dcfclk in 100 kHz units), CLK1_CLK0_BYPASS_CNTL 0x0049,
+//   CLK1_CLK3_BYPASS_CNTL 0x0067, CLK1_CLK3_DS_CNTL 0x0060,
+//   CLK1_CLK3_ALLOW_DS 0x0061.
+static status_t
+path_clk_status()
+{
+	static const uint32 kClkSeg1 = 0x16e00u;
+
+	uint32 pllReq = rd(kClkSeg1 + 0x000fu);
+	if (pllReq == 0xffffffffu) {
+		PATHLOG("clk_status: CLK1_CLK_PLL_REQ 0xffffffff (CLK1 does not"
+			" answer)\n");
+		return B_OK;
+	}
+	uint32 dispCnt = rd(kClkSeg1 + 0x008au);
+	uint32 dppCnt = rd(kClkSeg1 + 0x008bu);
+	uint32 dprefCnt = rd(kClkSeg1 + 0x008cu);
+	uint32 dcfCnt = rd(kClkSeg1 + 0x008du);
+	uint32 dispBypass = rd(kClkSeg1 + 0x0049u);
+	uint32 dcfBypass = rd(kClkSeg1 + 0x0067u);
+	uint32 dcfDsCntl = rd(kClkSeg1 + 0x0060u);
+	uint32 dcfAllowDs = rd(kClkSeg1 + 0x0061u);
+
+	PATHLOG("clk_status: PLL_REQ 0x%08" B_PRIx32 " dispclk %" B_PRIu32
+		" MHz (cnt 0x%" B_PRIx32 " bypass 0x%" B_PRIx32 ") dppclk %" B_PRIu32
+		" MHz dprefclk %" B_PRIu32 " MHz\n", pllReq, dispCnt / 10, dispCnt,
+		dispBypass & 7u, dppCnt / 10, dprefCnt / 10);
+	PATHLOG("clk_status: dcfclk %" B_PRIu32 " MHz (cnt 0x%" B_PRIx32
+		" bypass 0x%" B_PRIx32 ") ds_cntl 0x%08" B_PRIx32 " allow_ds 0x%08"
+		B_PRIx32 "\n", dcfCnt / 10, dcfCnt, dcfBypass & 7u, dcfDsCntl,
+		dcfAllowDs);
+	return B_OK;
+}
+
+
+// Read-only probe of one real DMU segment-1 register:
+// mmDENTIST_DISPCLK_CNTL ((0x00c0 + 0x0064) * 4 = 0x490, dcn_2_1_0_offset.h
+// BASE_IDX 1).
+static status_t
+path_dccg_seg1()
+{
+	uint32 byte = DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL);
+	PATHLOG("dccg_seg1: reading DENTIST_DISPCLK_CNTL at byte 0x%" B_PRIx32
+		"\n", byte);
+	uint32 value = Read32(OUT, byte);
+	PATHLOG("dccg_seg1: DENTIST_DISPCLK_CNTL 0x%08" B_PRIx32 "\n", value);
+	return B_OK;
+}
+
+
 status_t
 dcn21_probe_path(const char* name)
 {
@@ -223,9 +340,15 @@ dcn21_probe_path(const char* name)
 		status = path_mm_index();
 	else if (strcmp(name, "pcie_index2") == 0)
 		status = path_pcie_index2();
+	else if (strcmp(name, "smu_status") == 0)
+		status = path_smu_status();
+	else if (strcmp(name, "clk_status") == 0)
+		status = path_clk_status();
+	else if (strcmp(name, "dccg_seg1") == 0)
+		status = path_dccg_seg1();
 	else {
-		PATHLOG("unknown path \"%s\" (discovery, mm_index, pcie_index2)\n",
-			name);
+		PATHLOG("unknown path \"%s\" (discovery, mm_index, pcie_index2,"
+			" smu_status, clk_status, dccg_seg1)\n", name);
 		return B_BAD_VALUE;
 	}
 	PATHLOG("%s: done in %" B_PRId64 " us\n", name, system_time() - start);

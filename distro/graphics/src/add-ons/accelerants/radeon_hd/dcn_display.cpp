@@ -432,21 +432,23 @@ dcn_probe_locked()
 		ops->probe_path(path);
 		dcn_marker_clear();
 	}
+	// Check register access BEFORE log_pipes(): each non-answering DCN read
+	// takes ~139 ms on the 5625U, so running log_pipes() first added ~9.5 s
+	// of timeouts per boot. No DCN register is written before the registers
+	// are known to answer (stick 1 of PR 4712).
 	if (!dcn_marker_arm("pipes"))
 		return;
-	ops->log_pipes();
-	// No DCN register is written before the registers are known to answer
-	// (stick 1 of PR 4712: every read was 0xffffffff, and the DDC bit-bang
-	// that followed froze the machine).
 	char why[128] = "";
 	status_t access = ops->check_access(why, sizeof(why));
-	dcn_marker_clear();
 	if (access != B_OK) {
+		dcn_marker_clear();
 		DCNLOG("registers do not answer: %s\n", why);
 		dcn_switch_off("the display registers do not answer");
 		return;
 	}
 	DCNLOG("registers answer: %s\n", why);
+	ops->log_pipes();
+	dcn_marker_clear();
 
 	bool started = false;
 	uint32 found = 0;

@@ -283,13 +283,16 @@ dcn21_log_pipes()
 {
 	// Segment 1 (the DCCG) is read only when segment 2, which sticks 1 and 2
 	// showed is safe to read, answers; until then segment 1 is unproven.
-	bool seg2Answers = !dcn21_all_ones(dcn21_read(DCN21_DC_PINSTRAPS));
+	// Stop immediately on all-ones so we never pay 60 x 139 ms of bus timeouts.
+	if (dcn21_all_ones(dcn21_read(DCN21_DC_PINSTRAPS))) {
+		HEADLOG("DC_PINSTRAPS 0xffffffff, pipe log skipped\n");
+		return;
+	}
 	uint32 dmcub = dcn21_read(DCN21_DMCUB_CNTL);
 	HEADLOG("dmcub cntl 0x%08" B_PRIx32 " (%s), dispclk cntl 0x%08" B_PRIx32
 		"\n", dmcub, dcn21_all_ones(dmcub) ? "does not answer"
 			: (dmcub & DCN21_DMCUB_ENABLE) != 0 ? "running" : "off",
-		seg2Answers ? Read32(OUT, DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL))
-			: 0xffffffff);
+		Read32(OUT, DCN21_SEG1_BYTES(DCN21_DENTIST_DISPCLK_CNTL)));
 
 	for (uint32 i = 0; i < DCN21_OTG_COUNT; i++) {
 		uint32 otg = i * DCN21_OTG_STRIDE;
@@ -312,9 +315,7 @@ dcn21_log_pipes()
 				- ((hBlank >> 16) & DCN21_OTG_FIELD15_MASK),
 			(vBlank & DCN21_OTG_FIELD15_MASK)
 				- ((vBlank >> 16) & DCN21_OTG_FIELD15_MASK),
-			seg2Answers
-				? Read32(OUT, DCN21_SEG1_BYTES(DCN21_OTG_PIXEL_RATE_CNTL + i * 4))
-				: 0xffffffff,
+			Read32(OUT, DCN21_SEG1_BYTES(DCN21_OTG_PIXEL_RATE_CNTL + i * 4)),
 			dcn21_read(DCN21_OTG_STATUS_FRAME_COUNT + otg)
 				& DCN21_OTG_FRAME_COUNT_MASK);
 		HEADLOG("hubp%" B_PRIu32 " cntl 0x%08" B_PRIx32 " surface 0x%08" B_PRIx32
@@ -362,15 +363,24 @@ dcn21_check_access(char* why, size_t whySize)
 	static const uint32 kSmuResponseByte = (0x16000u + 0x29au) * 4u;
 	uint32 smu = Read32(OUT, kSmuResponseByte);
 	uint32 straps = dcn21_read(DCN21_DC_PINSTRAPS);
+	// Stop on the first all-ones read: on the 5625U each non-answering DCN
+	// read takes ~139 ms, so looping over all four OTGs would add >1.1 s.
+	if (dcn21_all_ones(straps)) {
+		snprintf(why, whySize, "DC_PINSTRAPS 0xffffffff (smu response 0x%08"
+			B_PRIx32 "%s)", smu, dcn21_all_ones(smu)
+				? ", the mapping does not answer either" : "");
+		return B_ERROR;
+	}
 
 	int32 panelOtg = -1;
 	uint32 panelTotal = 0;
 	for (uint32 i = 0; i < DCN21_OTG_COUNT; i++) {
 		uint32 otg = i * DCN21_OTG_STRIDE;
 		uint32 control = dcn21_read(DCN21_OTG_CONTROL + otg);
+		if (dcn21_all_ones(control) || (control & DCN21_OTG_MASTER_EN) == 0)
+			continue;
 		uint32 hTotal = dcn21_read(DCN21_OTG_H_TOTAL + otg);
-		if (dcn21_all_ones(control) || dcn21_all_ones(hTotal)
-			|| (control & DCN21_OTG_MASTER_EN) == 0)
+		if (dcn21_all_ones(hTotal))
 			continue;
 		uint32 total = (hTotal & DCN21_OTG_FIELD15_MASK) + 1;
 		if (total >= 320 && total <= 16384) {
@@ -380,12 +390,6 @@ dcn21_check_access(char* why, size_t whySize)
 		}
 	}
 
-	if (dcn21_all_ones(straps)) {
-		snprintf(why, whySize, "DC_PINSTRAPS 0xffffffff (smu response 0x%08"
-			B_PRIx32 "%s)", smu, dcn21_all_ones(smu)
-				? ", the mapping does not answer either" : "");
-		return B_ERROR;
-	}
 	if (panelOtg < 0) {
 		snprintf(why, whySize, "no OTG is on with a real mode (pinstraps 0x%08"
 			B_PRIx32 ", smu response 0x%08" B_PRIx32 ")", straps, smu);

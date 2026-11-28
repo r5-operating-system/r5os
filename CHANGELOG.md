@@ -8,6 +8,22 @@ Older entries are in `docs/changelog/`, one file per ISO week (Monday to Sunday)
 - [2026-W44](docs/changelog/2026-W44.md): 2026-10-26 to 2026-11-01, 2 entries
 <!-- changelog-archive: end -->
 
+## 2026-11-28 - Display: stop DCN timeout slowdown at boot; read-only SMU, clock and DCCG diagnostics (round 1)
+
+- Problem (stick 4, `b77736dd0e`, `generated/hdmi-logs/stick-boot-57.syslog`):
+  - IP discovery on the 5625U confirmed `DMU 2.1.0` bases `0x12`, `0xc0`, `0x34c0`, `0x9000`, `0x2403c00` (identical to `renoir_ip_offset.h`, `RCC_CONFIG_MEMSIZE = 0x200`). Direct BAR5, `MM_INDEX`, and `PCIE_INDEX2` all returned `DC_PINSTRAPS 0xffffffff` in ~139 ms each.
+  - Because every non-answering DCN read hits a ~139 ms hardware bus timeout, `dcn early` (7 reads before GPU start + 7 reads after = 1.95 s) plus `dcn_probe_locked()` running `log_pipes()` (60 reads) before `check_access()` (9 reads) added **~11.55 s** per boot (9.60 s in the accelerant alone).
+  - Why DCN segment 2 does not answer while the eDP panel is lit is still open. Tracing Linux `v6.12` (`soc15.c`, `nbio_v7_0.c`, `amdgpu_cgs.c`, `amdgpu_smu.c`, `smu_v12_0.c`, `renoir_ppt.c`, `amdgpu_dm.c`, `dc.c`, `dcn21_resource.c`, `rn_clk_mgr.c`, `rn_clk_mgr_vbios_smu.c`, `dmub_dcn21.c`) rules out wrong offsets, indirect access, NBIO init, and DMCUB (`dm_dmub_hw_init()` runs after `dc_create()` / `read_pipe_fuses()` / `read_dce_straps()`). Unlike Linux, R5 never inspects or wakes SMU GFXOFF (`SMUIO_GFX_MISC_CNTL`) or the VBIOS/display SMU mailbox (`MP1_SMN_C2PMSG_67/83/91`, `SetDisplayCount`), nor has it read the `CLK1` display clock counters or a real DMU segment-1 register.
+- Change:
+  - **Boot slowdown fix:** `dcn21_early.cpp` now reads `DC_PINSTRAPS` first and stops immediately on `0xffffffff` (1 read instead of 7 per stage). `dcn_display.cpp` now runs `check_access()` before `log_pipes()`, and `dcn21_hotplug.cpp` returns immediately from `check_access()` on `DC_PINSTRAPS == 0xffffffff` without reading the four OTGs (`log_pipes()` also skips on `0xffffffff`). Expected 5625U time when DCN does not answer: ~139 ms × 2 in the kernel + ~145–160 ms in the accelerant (**~0.42 s** total, saving **~11.1 s** per boot).
+  - **Read-only diagnostics (`dcn21_paths.cpp`, `boot-next dcndiag`):** added three zero-write paths behind `dcn_probe_path` (off by default, one per boot, protected by the fsynced crash marker): `smu_status` (driver mailbox `C2PMSG_66/82/90`, VBIOS/display mailbox `C2PMSG_67/83/91`, `SMUIO_GFX_MISC_CNTL` `0x5a320`, `PWR_MISC_CNTL_STATUS` `0x5ae0c`), `clk_status` (`CLK_BASE` seg 1 `0x16e00`: `CLK1_CLK_PLL_REQ`, `CLK1_CLK0..3_CURRENT_CNT` DISPCLK/DPPCLK/DPREFCLK/DCFCLK, `BYPASS_CNTL`, `CLK1_CLK3_DS_CNTL`, `CLK1_CLK3_ALLOW_DS`, stopping on first `0xffffffff`), and `dccg_seg1` (`mmDENTIST_DISPCLK_CNTL` at DMU seg 1 byte `0x490`).
+  - Documented the stick 4 result, slowdown fix, Linux v6.12 trace, and diagnostic plan in `docs/DISPLAY-DCN.md`.
+- Tested:
+  - `scripts/build-locked.sh` in WSL from worktree `R5OS-hdmi-gemini`: `jam_exit=0`, `mesa_exit=0`, `ok egl vendor`.
+  - QEMU/KVM (`-cpu host -smp 2`, private copy of `r5-os.image`): booted to rendered 1280×800 screen (`1023992/1024000` non-black pixels) within 22 s. QEMU has no AMD GPU, so `radeon_hd` does not bind and no DCN code runs there (0 ms added).
+  - `boot-next dcndiag` host test (`BOOT_NEXT_YES=0`): boot 1 (`smu_status`) → boot 2 (`clk_status`) → boot 3 (`dccg_seg1`) → settings file removed, `boot1.txt`..`boot3.txt` saved.
+- Limits: not run on the 5625U yet; expected ~11.1 s boot-time saving and the SMU/clock/DCCG register values await the round-1 stick.
+
 ## 2026-11-28 - Display: stick 3 froze; risky register paths only one per boot, behind the crash marker
 
 - Problem: stick 3 (`9ea2d26517`) froze hard during boot and left no syslog. Its kernel probe ran new paths with no crash marker (the kernel has none). Most likely cause:

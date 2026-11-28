@@ -55,11 +55,22 @@ r5_dcn21_early_log(radeon_info& info, const char* stage)
 		return;
 	uint64 bytes = area.size;
 	bigtime_t start = system_time();
+	// Each non-answering DCN read takes ~139 ms on the 5625U (hardware bus
+	// timeout). Stop on the first all-ones read instead of paying that timeout
+	// seven times per stage.
+	uint32 pinstraps = dcn21_early_read(info, kPinstraps, bytes);
+	if (pinstraps == 0xffffffff) {
+		dprintf("radeon_hd: dcn early: %s: pinstraps 0xffffffff (stopped on"
+			" first all-ones, mmio %" B_PRIu64 " KiB)\n", stage, bytes / 1024);
+		dprintf("radeon_hd: dcn early: %s took %" B_PRId64 " us\n", stage,
+			system_time() - start);
+		return;
+	}
 	dprintf("radeon_hd: dcn early: %s: pinstraps 0x%08" B_PRIx32
 		" dmcub 0x%08" B_PRIx32 " otg0 0x%08" B_PRIx32 " htotal 0x%08"
 		B_PRIx32 " otg1 0x%08" B_PRIx32 " otg2 0x%08" B_PRIx32 " otg3 0x%08"
 		B_PRIx32 " (mmio %" B_PRIu64 " KiB)\n", stage,
-		dcn21_early_read(info, kPinstraps, bytes),
+		pinstraps,
 		dcn21_early_read(info, kDmcubCntl, bytes),
 		dcn21_early_read(info, kOtg0Control, bytes),
 		dcn21_early_read(info, kOtg0HTotal, bytes),
